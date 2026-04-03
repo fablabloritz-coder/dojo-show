@@ -4,6 +4,7 @@ const { Server } = require('socket.io');
 const path = require('path');
 const fs = require('fs').promises;
 const fsSync = require('fs');
+const crypto = require('crypto');
 
 const app = express();
 const server = http.createServer(app);
@@ -96,10 +97,16 @@ function getClientState(includeSecrets = false) {
 // ─── PERSISTENCE ────────────────────────────────────────
 const DATA_DIR = path.join(__dirname, 'data');
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
+const AVATARS_DIR = path.join(DATA_DIR, 'avatars');
+
+app.use('/avatars', express.static(AVATARS_DIR));
 
 function ensureDataDir() {
   if (!fsSync.existsSync(DATA_DIR)) {
     fsSync.mkdirSync(DATA_DIR, { recursive: true });
+  }
+  if (!fsSync.existsSync(AVATARS_DIR)) {
+    fsSync.mkdirSync(AVATARS_DIR, { recursive: true });
   }
 }
 
@@ -111,7 +118,52 @@ function sanitizeFilename(name) {
     .substring(0, 50);
 }
 
+function extFromContentType(contentType) {
+  const type = (contentType || '').toLowerCase();
+  if (type.includes('image/png')) return 'png';
+  if (type.includes('image/jpeg') || type.includes('image/jpg')) return 'jpg';
+  if (type.includes('image/webp')) return 'webp';
+  if (type.includes('image/gif')) return 'gif';
+  return null;
+}
+
+async function saveAvatarBuffer(buffer, contentType, prefix = 'avatar') {
+  ensureDataDir();
+  const ext = extFromContentType(contentType);
+  if (!ext) return null;
+  const hash = crypto.createHash('sha1').update(buffer).digest('hex').slice(0, 12);
+  const filename = `${prefix}-${Date.now()}-${hash}.${ext}`;
+  const filepath = path.join(AVATARS_DIR, filename);
+  await fs.writeFile(filepath, buffer);
+  return `/avatars/${filename}`;
+}
+
+async function saveDataUrlAvatar(dataUrl, prefix = 'avatar', maxBytes = 500000) {
+  const match = /^data:(image\/(png|jpeg|jpg|webp|gif));base64,([A-Za-z0-9+/=]+)$/i.exec(dataUrl || '');
+  if (!match) return null;
+  const contentType = match[1].toLowerCase();
+  const raw = Buffer.from(match[3], 'base64');
+  if (raw.length > maxBytes) return null;
+  return saveAvatarBuffer(raw, contentType, prefix);
+}
+
+async function mapWithConcurrency(items, limit, mapper) {
+  const results = new Array(items.length);
+  let idx = 0;
+  const workers = new Array(Math.max(1, limit)).fill(null).map(async () => {
+    while (true) {
+      const current = idx;
+      idx += 1;
+      if (current >= items.length) break;
+      results[current] = await mapper(items[current], current);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
 async function saveState() {
+  const tempStateFile = `${STATE_FILE}.tmp`;
   try {
     ensureDataDir();
     const data = {
@@ -119,9 +171,16 @@ async function saveState() {
       savedAt: new Date().toISOString(),
       version: '2.0',
     };
-    await fs.writeFile(STATE_FILE, JSON.stringify(data, null, 2));
+    const serialized = JSON.stringify(data, null, 2);
+    await fs.writeFile(tempStateFile, serialized);
+    await fs.rename(tempStateFile, STATE_FILE);
     console.log(`✅ État sauvegardé: ${new Date().toLocaleTimeString()}`);
   } catch (error) {
+    try {
+      await fs.unlink(tempStateFile);
+    } catch {
+      // No-op: temp file may not exist.
+    }
     console.error('❌ Erreur sauvegarde:', error.message);
   }
 }
@@ -258,7 +317,7 @@ function updateBracketFromMatch(match) {
 }
 
 // ─── AVATAR HELPERS ─────────────────────────────────────
-async function urlToBase64(url, maxBytes = 500000) {
+async function urlToLocalAvatar(url, maxBytes = 500000) {
   try {
     const fetch = (await import('node-fetch')).default;
     const resp = await fetch(url, { timeout: 5000 });
@@ -267,10 +326,36 @@ async function urlToBase64(url, maxBytes = 500000) {
     if (!contentType.startsWith('image/')) return null;
     const buffer = await resp.buffer();
     if (buffer.length > maxBytes) return null;
-    return `data:${contentType};base64,${buffer.toString('base64')}`;
+    return saveAvatarBuffer(buffer, contentType, 'ext');
   } catch {
     return null;
   }
+}
+
+async function resolveAvatarInput(avatarInput, prefix = 'avatar') {
+  if (!avatarInput || typeof avatarInput !== 'string') return DEFAULT_AVATAR;
+  if (avatarInput.startsWith('/avatars/')) return avatarInput;
+  if (avatarInput.startsWith('http://') || avatarInput.startsWith('https://')) {
+    return (await urlToLocalAvatar(avatarInput)) || DEFAULT_AVATAR;
+  }
+  if (avatarInput.startsWith('data:image/')) {
+    return (await saveDataUrlAvatar(avatarInput, prefix)) || DEFAULT_AVATAR;
+  }
+  return DEFAULT_AVATAR;
+}
+
+async function migrateStoredPlayerAvatars(prefix = 'migrated') {
+  if (!Array.isArray(state.players) || state.players.length === 0) return false;
+  let changed = false;
+  state.players = await mapWithConcurrency(state.players, 4, async (player, index) => {
+    if (!player || typeof player !== 'object') return player;
+    const current = typeof player.avatar === 'string' ? player.avatar : '';
+    if (!current || current.startsWith('/avatars/') || current === DEFAULT_AVATAR) return player;
+    const migrated = await resolveAvatarInput(current, `${prefix}-${index}`);
+    if (migrated !== current) changed = true;
+    return { ...player, avatar: migrated };
+  });
+  return changed;
 }
 
 // ─── SOCKET.IO ──────────────────────────────────────────
@@ -728,22 +813,13 @@ io.on('connection', (socket) => {
   socket.on('startgg:setData', async (data) => {
     if (data.games) state.games = data.games;
     if (data.players) {
-      const players = [];
-      for (const p of data.players) {
+      const players = await mapWithConcurrency(data.players, 4, async (p) => {
         if (typeof p === 'string') {
-          players.push({ id: genId(), name: p, avatar: DEFAULT_AVATAR });
-        } else {
-          let avatar = DEFAULT_AVATAR;
-          // Convert URL avatars to base64
-          if (p.avatar && p.avatar.startsWith('http')) {
-            const b64 = await urlToBase64(p.avatar);
-            avatar = b64 || DEFAULT_AVATAR;
-          } else if (p.avatar && p.avatar.startsWith('data:image/')) {
-            avatar = p.avatar;
-          }
-          players.push({ id: p.id || genId(), name: p.name, avatar });
+          return { id: genId(), name: p, avatar: DEFAULT_AVATAR };
         }
-      }
+        const avatar = await resolveAvatarInput(p.avatar, 'startgg');
+        return { id: p.id || genId(), name: p.name, avatar };
+      });
       state.players = players;
     }
     broadcast();
@@ -782,23 +858,20 @@ io.on('connection', (socket) => {
   });
 
   // --- Players CRUD ---
-  socket.on('players:add', (data) => {
+  socket.on('players:add', async (data) => {
     const name = (data.name || '').trim();
     if (!name) return;
-    let avatar = DEFAULT_AVATAR;
-    if (data.avatar && data.avatar.length < 500000 && /^data:image\//.test(data.avatar)) {
-      avatar = data.avatar;
-    }
+    const avatar = await resolveAvatarInput(data.avatar, 'player');
     state.players.push({ id: genId(), name, avatar });
     broadcast();
   });
 
-  socket.on('players:update', (data) => {
+  socket.on('players:update', async (data) => {
     const player = state.players.find(p => p.id === data.id);
     if (!player) return;
     if (data.name) player.name = data.name.trim();
     if (data.avatar !== undefined) {
-      player.avatar = (data.avatar && data.avatar.length < 500000 && /^data:image\//.test(data.avatar)) ? data.avatar : DEFAULT_AVATAR;
+      player.avatar = await resolveAvatarInput(data.avatar, `player-${data.id || 'u'}`);
     }
     broadcast();
   });
@@ -864,6 +937,7 @@ io.on('connection', (socket) => {
       state.games = backupData.games || [];
       state.players = backupData.players || [];
       state.gameSettings = backupData.gameSettings || {};
+      await migrateStoredPlayerAvatars('restore');
       
       broadcast();
       socket.emit('restore:success', { filename: sanitizedFilename, savedAt: backupData.savedAt });
@@ -1114,6 +1188,20 @@ const PORT = process.env.PORT || 3000;
 
 // Initialize state from saved data
 loadState();
+
+// Migrate legacy avatars (data URLs / external URLs) to local files in background.
+(async () => {
+  try {
+    const changed = await migrateStoredPlayerAvatars('state');
+    if (changed) {
+      await saveState();
+      broadcast();
+      console.log('🖼️ Avatars migrés vers des fichiers locaux');
+    }
+  } catch (error) {
+    console.error('⚠️ Migration avatars ignorée:', error.message);
+  }
+})();
 
 // Auto-save (non-concurrent, configurable interval)
 let saveInterval;
