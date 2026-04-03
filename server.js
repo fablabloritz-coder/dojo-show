@@ -921,11 +921,13 @@ io.on('connection', (socket) => {
 
   // --- Backup & Restore ---
   socket.on('state:backup', async (data) => {
+    let tempBackupPath = '';
     try {
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       const sanitizedName = sanitizeFilename(data.name);
       const filename = sanitizedName ? `backup-${sanitizedName}-${timestamp}.json` : `backup-${timestamp}.json`;
       const backupPath = path.join(DATA_DIR, filename);
+      tempBackupPath = `${backupPath}.tmp`;
       
       ensureDataDir();
       const backupData = {
@@ -936,10 +938,17 @@ io.on('connection', (socket) => {
         backupType: 'manual',
       };
       
-      await fs.writeFile(backupPath, JSON.stringify(backupData, null, 2));
+      const serialized = JSON.stringify(backupData, null, 2);
+      await fs.writeFile(tempBackupPath, serialized);
+      await fs.rename(tempBackupPath, backupPath);
       socket.emit('backup:success', { filename, path: backupPath });
       console.log(`✅ Backup créé: ${filename}`);
     } catch (error) {
+      try {
+        if (tempBackupPath) await fs.unlink(tempBackupPath);
+      } catch {
+        // No-op: temporary backup may not exist.
+      }
       socket.emit('backup:error', { message: error.message });
       console.error('❌ Erreur backup:', error.message);
     }
