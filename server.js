@@ -466,6 +466,7 @@ io.on('connection', (socket) => {
     }
     match.phase = 'decided';
     match.winner = p1 ? 1 : 2;
+    match.forfeit = true;
     broadcast();
   });
 
@@ -480,8 +481,13 @@ io.on('connection', (socket) => {
     const match = state.matches.find(m => m.id === data.id);
     if (!match) return;
     if (state.settings.highlightMatchId === match.id) state.settings.highlightMatchId = null;
-    state.matches = state.matches.filter(m => m.id !== match.id);
+    match.status = 'cancelled';
+    match.cancelledAt = Date.now();
     broadcast();
+    setTimeout(() => {
+      state.matches = state.matches.filter(m => m.id !== match.id);
+      broadcast();
+    }, 3000);
   });
 
   socket.on('match:restore', (data) => {

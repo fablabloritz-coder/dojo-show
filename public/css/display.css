@@ -200,6 +200,76 @@ body {
   border-color: var(--success) !important;
   box-shadow: 0 0 30px rgba(0,200,83,0.2), 0 4px 30px rgba(0,0,0,0.5);
 }
+
+/* ─── FORFEIT ANIMATION ──────────────────── */
+.display-match-card.card-forfeit {
+  border-color: #ff6d00 !important;
+  box-shadow: 0 0 30px rgba(255,109,0,0.3), 0 4px 30px rgba(0,0,0,0.5);
+  animation: forfeitPulse 2s ease infinite;
+}
+@keyframes forfeitPulse {
+  0%, 100% { box-shadow: 0 0 30px rgba(255,109,0,0.2), 0 4px 30px rgba(0,0,0,0.5); }
+  50% { box-shadow: 0 0 50px rgba(255,109,0,0.5), 0 4px 30px rgba(0,0,0,0.5); }
+}
+.dmc-player-name.dmc-forfeit-loser {
+  color: #ff6d00 !important;
+  text-decoration: line-through;
+  opacity: 0.5;
+}
+
+/* ─── CANCELLED ANIMATION ────────────────── */
+.display-match-card.card-cancelled {
+  border-color: #ff1744 !important;
+  animation: cancelFadeOut 3s ease forwards;
+}
+@keyframes cancelFadeOut {
+  0% { opacity: 1; transform: scale(1); border-color: #ff1744; box-shadow: 0 0 40px rgba(255,23,68,0.4); }
+  20% { opacity: 1; transform: scale(1.02); box-shadow: 0 0 60px rgba(255,23,68,0.6); }
+  100% { opacity: 0; transform: scale(0.9); box-shadow: none; }
+}
+
+/* ─── OVERLAY (forfeit / cancelled) ──────── */
+.dmc-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  pointer-events: none;
+  border-radius: inherit;
+}
+.dmc-overlay span {
+  font-size: 2.2em;
+  font-weight: 900;
+  letter-spacing: 6px;
+  text-transform: uppercase;
+  padding: 8px 28px;
+  border-radius: 8px;
+  animation: overlayStamp 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes overlayStamp {
+  0% { transform: scale(2.5) rotate(-8deg); opacity: 0; }
+  60% { transform: scale(0.95) rotate(-3deg); opacity: 1; }
+  100% { transform: scale(1) rotate(-5deg); opacity: 1; }
+}
+.dmc-overlay-forfeit {
+  background: rgba(255,109,0,0.1);
+}
+.dmc-overlay-forfeit span {
+  color: #ff6d00;
+  border: 4px solid #ff6d00;
+  text-shadow: 0 0 20px rgba(255,109,0,0.6);
+}
+.dmc-overlay-cancel {
+  background: rgba(255,23,68,0.1);
+}
+.dmc-overlay-cancel span {
+  color: #ff1744;
+  border: 4px solid #ff1744;
+  text-shadow: 0 0 20px rgba(255,23,68,0.6);
+}
+
 .dmc-station {
   position: absolute;
   top: 12px;

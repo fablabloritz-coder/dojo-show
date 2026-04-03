@@ -94,7 +94,7 @@ function getDensityClass(rows, cols) {
 function renderMatches() {
   const grid = document.getElementById('matchGrid');
   const highlightId = state.settings.highlightMatchId;
-  const activeMatches = state.matches.filter(m => m.status === 'active');
+  const activeMatches = state.matches.filter(m => m.status === 'active' || m.status === 'cancelled');
 
   // Spotlight mode: single match in 1×1
   if (highlightId) {
@@ -171,10 +171,22 @@ function renderSingleMatchCard(m, titleSize, nameSize, scoreSize, timerSize, avS
     // Winner highlight
     const w1 = phase === 'decided' && m.winner === 1 ? ' dmc-winner' : '';
     const w2 = phase === 'decided' && m.winner === 2 ? ' dmc-winner' : '';
-    const cardExtra = phase === 'decided' ? ' card-decided' : '';
+    const cardExtra = m.status === 'cancelled' ? ' card-cancelled'
+                    : (m.forfeit && phase === 'decided') ? ' card-forfeit card-decided'
+                    : phase === 'decided' ? ' card-decided' : '';
+
+    // Forfeit: loser class
+    const f1 = m.forfeit && phase === 'decided' && m.winner === 2 ? ' dmc-forfeit-loser' : '';
+    const f2 = m.forfeit && phase === 'decided' && m.winner === 1 ? ' dmc-forfeit-loser' : '';
+
+    // Overlay for forfeit / cancelled
+    const overlay = m.status === 'cancelled' ? '<div class="dmc-overlay dmc-overlay-cancel"><span>ANNULÉ</span></div>'
+                  : (m.forfeit && phase === 'decided') ? '<div class="dmc-overlay dmc-overlay-forfeit"><span>FORFAIT</span></div>'
+                  : '';
 
     return `
     <div class="display-match-card ${isAlt ? 'alt' : ''}${cardExtra}" data-id="${m.id}">
+      ${overlay}
       ${(() => { const gi = getGameImage(m.game); return gi ? `<div class="dmc-game-bg" style="background-image:url('${gi.image}');opacity:${gi.imageOpacity || 0.3}"></div>` : ''; })()}
       ${m.station ? `<div class="dmc-station">${esc(m.station)}</div>` : ''}
       ${m.streaming ? '<div class="dmc-twitch"><svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M11.64 5.93H13.07V10.21H11.64M15.57 5.93H17V10.21H15.57M7 2L3.43 5.57V18.43H7.71V22L11.29 18.43H14.14L20.57 12V2M19.14 11.29L16.29 14.14H13.43L10.93 16.64V14.14H7.71V3.43H19.14Z"/></svg> LIVE</div>' : ''}
@@ -184,14 +196,14 @@ function renderSingleMatchCard(m, titleSize, nameSize, scoreSize, timerSize, avS
       <div class="dmc-players">
         <div class="dmc-player">
           ${avatarImg(m.player1.name, avSize)}
-          <div class="dmc-player-name${w1}" style="font-size:${nameSize}px">${esc(m.player1.name)}</div>
+          <div class="dmc-player-name${w1}${f1}" style="font-size:${nameSize}px">${esc(m.player1.name)}</div>
           ${phase === 'calling' ? `<div class="dmc-presence ${m.player1.present ? 'present' : ''}"></div>` : ''}
           ${w1 ? '<div class="dmc-winner-badge">🏆</div>' : ''}
         </div>
         <div class="dmc-vs" style="font-size:${Math.round(nameSize * 0.7)}px">VS</div>
         <div class="dmc-player">
           ${avatarImg(m.player2.name, avSize)}
-          <div class="dmc-player-name${w2}" style="font-size:${nameSize}px">${esc(m.player2.name)}</div>
+          <div class="dmc-player-name${w2}${f2}" style="font-size:${nameSize}px">${esc(m.player2.name)}</div>
           ${phase === 'calling' ? `<div class="dmc-presence ${m.player2.present ? 'present' : ''}"></div>` : ''}
           ${w2 ? '<div class="dmc-winner-badge">🏆</div>' : ''}
         </div>
