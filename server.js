@@ -98,6 +98,7 @@ function getClientState(includeSecrets = false) {
 const DATA_DIR = path.join(__dirname, 'data');
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
 const AVATARS_DIR = path.join(DATA_DIR, 'avatars');
+const BACKUP_MAX_KEEP = 100;
 
 app.use('/avatars', express.static(AVATARS_DIR));
 
@@ -160,6 +161,37 @@ async function mapWithConcurrency(items, limit, mapper) {
   });
   await Promise.all(workers);
   return results;
+}
+
+async function pruneOldBackupFiles(maxKeep = BACKUP_MAX_KEEP) {
+  ensureDataDir();
+  const files = await fs.readdir(DATA_DIR);
+  const backupFiles = files.filter((f) => f.startsWith('backup-') && f.endsWith('.json'));
+  if (backupFiles.length <= maxKeep) return 0;
+
+  const withMtime = await mapWithConcurrency(backupFiles, 6, async (filename) => {
+    try {
+      const stats = await fs.stat(path.join(DATA_DIR, filename));
+      return { filename, mtimeMs: stats.mtimeMs };
+    } catch {
+      return null;
+    }
+  });
+
+  const sorted = withMtime
+    .filter(Boolean)
+    .sort((a, b) => b.mtimeMs - a.mtimeMs);
+  const toDelete = sorted.slice(maxKeep);
+
+  await mapWithConcurrency(toDelete, 6, async (entry) => {
+    try {
+      await fs.unlink(path.join(DATA_DIR, entry.filename));
+    } catch {
+      // Ignore deletion failures for best-effort retention cleanup.
+    }
+  });
+
+  return toDelete.length;
 }
 
 let avatarPruneTimer = null;
@@ -941,6 +973,10 @@ io.on('connection', (socket) => {
       const serialized = JSON.stringify(backupData, null, 2);
       await fs.writeFile(tempBackupPath, serialized);
       await fs.rename(tempBackupPath, backupPath);
+      const removed = await pruneOldBackupFiles();
+      if (removed > 0) {
+        console.log(`🧹 Backups anciens supprimés: ${removed}`);
+      }
       socket.emit('backup:success', { filename, path: backupPath });
       console.log(`✅ Backup créé: ${filename}`);
     } catch (error) {
@@ -1247,6 +1283,10 @@ loadState();
       console.log('🖼️ Avatars migrés vers des fichiers locaux');
     }
     scheduleAvatarPrune(500);
+    const removed = await pruneOldBackupFiles();
+    if (removed > 0) {
+      console.log(`🧹 Backups anciens supprimés au démarrage: ${removed}`);
+    }
   } catch (error) {
     console.error('⚠️ Migration avatars ignorée:', error.message);
   }
