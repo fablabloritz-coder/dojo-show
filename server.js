@@ -162,6 +162,41 @@ async function mapWithConcurrency(items, limit, mapper) {
   return results;
 }
 
+let avatarPruneTimer = null;
+
+function getReferencedAvatarFilenames() {
+  const files = new Set();
+  if (!Array.isArray(state.players)) return files;
+  for (const p of state.players) {
+    const a = (p && typeof p.avatar === 'string') ? p.avatar : '';
+    if (!a.startsWith('/avatars/')) continue;
+    const filename = a.slice('/avatars/'.length).trim();
+    if (filename) files.add(filename);
+  }
+  return files;
+}
+
+async function pruneOrphanAvatarFiles() {
+  ensureDataDir();
+  const referenced = getReferencedAvatarFilenames();
+  const existing = await fs.readdir(AVATARS_DIR);
+  const toDelete = existing.filter((f) => !referenced.has(f));
+  await mapWithConcurrency(toDelete, 4, async (filename) => {
+    try {
+      await fs.unlink(path.join(AVATARS_DIR, filename));
+    } catch {
+      // Ignore deletion failures for best-effort cleanup.
+    }
+  });
+}
+
+function scheduleAvatarPrune(delayMs = 1500) {
+  if (avatarPruneTimer) clearTimeout(avatarPruneTimer);
+  avatarPruneTimer = setTimeout(() => {
+    pruneOrphanAvatarFiles().catch(() => {});
+  }, delayMs);
+}
+
 async function saveState() {
   const tempStateFile = `${STATE_FILE}.tmp`;
   try {
@@ -821,6 +856,7 @@ io.on('connection', (socket) => {
         return { id: p.id || genId(), name: p.name, avatar };
       });
       state.players = players;
+      scheduleAvatarPrune();
     }
     broadcast();
   });
@@ -872,12 +908,14 @@ io.on('connection', (socket) => {
     if (data.name) player.name = data.name.trim();
     if (data.avatar !== undefined) {
       player.avatar = await resolveAvatarInput(data.avatar, `player-${data.id || 'u'}`);
+      scheduleAvatarPrune();
     }
     broadcast();
   });
 
   socket.on('players:delete', (data) => {
     state.players = state.players.filter(p => p.id !== data.id);
+    scheduleAvatarPrune();
     broadcast();
   });
 
@@ -938,6 +976,7 @@ io.on('connection', (socket) => {
       state.players = backupData.players || [];
       state.gameSettings = backupData.gameSettings || {};
       await migrateStoredPlayerAvatars('restore');
+      scheduleAvatarPrune();
       
       broadcast();
       socket.emit('restore:success', { filename: sanitizedFilename, savedAt: backupData.savedAt });
@@ -1198,6 +1237,7 @@ loadState();
       broadcast();
       console.log('🖼️ Avatars migrés vers des fichiers locaux');
     }
+    scheduleAvatarPrune(500);
   } catch (error) {
     console.error('⚠️ Migration avatars ignorée:', error.message);
   }
