@@ -47,7 +47,9 @@ let state = {
     accentColor: '#7b2ff7',
     fontFamily: 'Inter',
     autoRotation: { matches: 0, waiting: 0, bracket: 0 },
+    rotationEnabled: false,
     highlightMatchId: null,
+    autoSaveInterval: 30,
     fontProfiles: {
       '1x1': defaultFontProfile(2.0),
       '1x2': defaultFontProfile(1.6),
@@ -147,6 +149,8 @@ function loadState() {
       state.settings.autoRotation = { matches: v, waiting: v, bracket: v };
     }
     if (state.settings.highlightMatchId === undefined) state.settings.highlightMatchId = null;
+    if (state.settings.rotationEnabled === undefined) state.settings.rotationEnabled = false;
+    if (state.settings.autoSaveInterval === undefined) state.settings.autoSaveInterval = 30;
     state.bracket = data.bracket || state.bracket;
     state.startgg = data.startgg || state.startgg;
     state.games = data.games || [];
@@ -594,6 +598,20 @@ io.on('connection', (socket) => {
       }
     }
     broadcast();
+  });
+
+  socket.on('settings:rotationEnabled', (data) => {
+    state.settings.rotationEnabled = !!data;
+    broadcast();
+  });
+
+  socket.on('settings:autoSaveInterval', (data) => {
+    const seconds = parseInt(data);
+    if (!isNaN(seconds) && seconds >= 10 && seconds <= 600) {
+      state.settings.autoSaveInterval = seconds;
+      restartAutoSave();
+      broadcast();
+    }
   });
 
   socket.on('games:updateSettings', (data) => {
@@ -1091,7 +1109,7 @@ const PORT = process.env.PORT || 3000;
 // Initialize state from saved data
 loadState();
 
-// Auto-save every 30 seconds (non-concurrent)
+// Auto-save (non-concurrent, configurable interval)
 let saveInterval;
 let isSaving = false;
 
@@ -1105,7 +1123,14 @@ async function scheduleAutoSave() {
   }
 }
 
-saveInterval = setInterval(scheduleAutoSave, 30000);
+function restartAutoSave() {
+  if (saveInterval) clearInterval(saveInterval);
+  const ms = (state.settings.autoSaveInterval || 30) * 1000;
+  saveInterval = setInterval(scheduleAutoSave, ms);
+  console.log(`🔄 Auto-save: toutes les ${state.settings.autoSaveInterval || 30}s`);
+}
+
+restartAutoSave();
 
 // Cleanup on process exit
 process.on('SIGINT', () => {

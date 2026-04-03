@@ -24,6 +24,7 @@ socket.on('state:full', (newState) => {
   loadAccentColor();
   loadFontFamily();
   loadAutoRotation();
+  loadAutoSave();
 });
 
 socket.on('connect', () => {
@@ -456,6 +457,7 @@ function setFontFamily(font) {
 // ─── AUTO ROTATION ────────────────────────────────────────
 function loadAutoRotation() {
   const ar = (state.settings && state.settings.autoRotation) || { matches: 0, waiting: 0, bracket: 0 };
+  const enabled = !!(state.settings && state.settings.rotationEnabled);
   // Migrate old single-value format
   const vals = typeof ar === 'number' ? { matches: ar, waiting: ar, bracket: ar } : ar;
   const modes = ['matches', 'waiting', 'bracket'];
@@ -465,7 +467,25 @@ function loadAutoRotation() {
     if (slider) slider.value = vals[m] || 0;
     if (label) label.textContent = (vals[m] || 0) > 0 ? `${vals[m]}s` : 'Off';
   });
-  updateRotationSummary(vals);
+  // Toggle
+  const toggle = document.getElementById('rotationEnabledToggle');
+  if (toggle) toggle.checked = enabled;
+  const slidersArea = document.getElementById('rotationSliders');
+  if (slidersArea) slidersArea.classList.toggle('disabled', !enabled);
+  updateRotationSummary(vals, enabled);
+}
+
+function setRotationEnabled(enabled) {
+  const slidersArea = document.getElementById('rotationSliders');
+  if (slidersArea) slidersArea.classList.toggle('disabled', !enabled);
+  socket.emit('settings:rotationEnabled', enabled);
+  // Update summary
+  const ar = {};
+  ['matches', 'waiting', 'bracket'].forEach(m => {
+    const slider = document.getElementById(`rotation-${m}`);
+    ar[m] = slider ? parseInt(slider.value) || 0 : 0;
+  });
+  updateRotationSummary(ar, enabled);
 }
 
 function setAutoRotationView(mode, value) {
@@ -478,22 +498,46 @@ function setAutoRotationView(mode, value) {
     const slider = document.getElementById(`rotation-${m}`);
     ar[m] = m === mode ? seconds : (slider ? parseInt(slider.value) || 0 : 0);
   });
-  updateRotationSummary(ar);
+  const enabled = document.getElementById('rotationEnabledToggle')?.checked || false;
+  updateRotationSummary(ar, enabled);
   socket.emit('settings:autoRotation', ar);
 }
 
-function updateRotationSummary(ar) {
+function updateRotationSummary(ar, enabled) {
   const el = document.getElementById('rotationSummary');
   if (!el) return;
+  if (!enabled) {
+    el.textContent = 'Rotation désactivée';
+    el.className = 'rotation-summary off';
+    return;
+  }
   const active = ['matches', 'waiting', 'bracket'].filter(m => (ar[m] || 0) > 0);
   if (active.length < 2) {
-    el.textContent = 'Désactivé — au moins 2 modes doivent avoir une durée';
+    el.textContent = 'Au moins 2 modes doivent avoir une durée';
     el.className = 'rotation-summary off';
   } else {
     const total = active.reduce((s, m) => s + ar[m], 0);
     el.textContent = `Cycle actif : ${active.length} modes, ${total}s total`;
     el.className = 'rotation-summary on';
   }
+}
+
+// ─── AUTO SAVE ────────────────────────────────────────────
+function loadAutoSave() {
+  const seconds = (state.settings && state.settings.autoSaveInterval) || 30;
+  const slider = document.getElementById('autoSaveSlider');
+  const val = document.getElementById('autoSaveVal');
+  if (slider) slider.value = seconds;
+  if (val) val.textContent = seconds >= 60 ? `${Math.round(seconds / 60)}min` : `${seconds}s`;
+}
+
+function setAutoSaveInterval(value) {
+  const seconds = parseInt(value) || 30;
+  const slider = document.getElementById('autoSaveSlider');
+  const val = document.getElementById('autoSaveVal');
+  if (slider) slider.value = seconds;
+  if (val) val.textContent = seconds >= 60 ? `${Math.round(seconds / 60)}min` : `${seconds}s`;
+  socket.emit('settings:autoSaveInterval', seconds);
 }
 
 // ─── GAME SETTINGS ────────────────────────────────────────

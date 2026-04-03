@@ -397,6 +397,7 @@ function getNextMode(current) {
 function isRotationActive() {
   const ar = state.settings.autoRotation;
   if (!ar || typeof ar !== 'object') return false;
+  if (!state.settings.rotationEnabled) return false;
   const activeModes = DISPLAY_MODES.filter(m => (ar[m] || 0) > 0);
   return activeModes.length >= 2; // Need at least 2 modes with duration to rotate
 }

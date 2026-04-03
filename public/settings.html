@@ -90,24 +90,54 @@
 
     <div class="settings-card">
       <h2>🔄 Rotation automatique</h2>
-      <p class="help-text">Régler la durée d'affichage de chaque vue. Au moins 2 vues doivent avoir une durée pour activer la rotation.</p>
+      <p class="help-text">Basculer automatiquement entre les modes d'affichage. Réglez la durée de chaque vue.</p>
       <div class="rotation-section">
-        <div class="rotation-view-row">
-          <label>🎮 Matchs en cours</label>
-          <input type="range" id="rotation-matches" min="0" max="120" step="5" value="0" oninput="setAutoRotationView('matches', this.value)">
-          <span class="rotation-view-val" id="rotation-matches-val">Off</span>
+        <div class="toggle-row">
+          <label>Activer la rotation</label>
+          <label class="toggle-switch">
+            <input type="checkbox" id="rotationEnabledToggle" onchange="setRotationEnabled(this.checked)">
+            <span class="toggle-slider"></span>
+          </label>
         </div>
-        <div class="rotation-view-row">
-          <label>🕐 File d'attente</label>
-          <input type="range" id="rotation-waiting" min="0" max="120" step="5" value="0" oninput="setAutoRotationView('waiting', this.value)">
-          <span class="rotation-view-val" id="rotation-waiting-val">Off</span>
+        <div id="rotationSliders" class="rotation-sliders-area">
+          <div class="rotation-view-row">
+            <label>🎮 Matchs en cours</label>
+            <input type="range" id="rotation-matches" min="0" max="120" step="5" value="0" oninput="setAutoRotationView('matches', this.value)">
+            <span class="rotation-view-val" id="rotation-matches-val">Off</span>
+          </div>
+          <div class="rotation-view-row">
+            <label>🕐 File d'attente</label>
+            <input type="range" id="rotation-waiting" min="0" max="120" step="5" value="0" oninput="setAutoRotationView('waiting', this.value)">
+            <span class="rotation-view-val" id="rotation-waiting-val">Off</span>
+          </div>
+          <div class="rotation-view-row">
+            <label>🏆 Bracket</label>
+            <input type="range" id="rotation-bracket" min="0" max="120" step="5" value="0" oninput="setAutoRotationView('bracket', this.value)">
+            <span class="rotation-view-val" id="rotation-bracket-val">Off</span>
+          </div>
+          <div class="rotation-summary off" id="rotationSummary">Désactivé</div>
         </div>
+      </div>
+    </div>
+
+    <div class="settings-card">
+      <h2>💾 Sauvegarde automatique</h2>
+      <p class="help-text">L'état du tournoi est sauvegardé automatiquement. Réglez la fréquence ci-dessous.</p>
+      <div class="autosave-section">
         <div class="rotation-view-row">
-          <label>🏆 Bracket</label>
-          <input type="range" id="rotation-bracket" min="0" max="120" step="5" value="0" oninput="setAutoRotationView('bracket', this.value)">
-          <span class="rotation-view-val" id="rotation-bracket-val">Off</span>
+          <label>Fréquence</label>
+          <input type="range" id="autoSaveSlider" min="10" max="300" step="10" value="30" oninput="setAutoSaveInterval(this.value)">
+          <span class="rotation-view-val" id="autoSaveVal">30s</span>
         </div>
-        <div class="rotation-summary off" id="rotationSummary">Désactivé</div>
+        <div class="autosave-presets">
+          <button class="btn btn-secondary btn-sm" onclick="setAutoSaveInterval(10)">10s</button>
+          <button class="btn btn-secondary btn-sm" onclick="setAutoSaveInterval(30)">30s</button>
+          <button class="btn btn-secondary btn-sm" onclick="setAutoSaveInterval(60)">1min</button>
+          <button class="btn btn-secondary btn-sm" onclick="setAutoSaveInterval(300)">5min</button>
+        </div>
+        <div class="autosave-info">
+          <span class="help-text">📁 Fichier de sauvegarde : <code>data/state.json</code> (dans le dossier du serveur)</span>
+        </div>
       </div>
     </div>
   </section>
