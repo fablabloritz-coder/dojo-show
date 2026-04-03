@@ -1246,12 +1246,20 @@ loadState();
 // Auto-save (non-concurrent, configurable interval)
 let saveInterval;
 let isSaving = false;
+let savePending = false;
 
-async function scheduleAutoSave() {
-  if (isSaving) return;
+async function scheduleAutoSave(force = false) {
+  if (isSaving && !force) {
+    savePending = true;
+    return;
+  }
   isSaving = true;
   try {
     await saveState();
+    if (savePending) {
+      savePending = false;
+      await saveState();
+    }
   } finally {
     isSaving = false;
   }
@@ -1270,7 +1278,7 @@ restartAutoSave();
 process.on('SIGINT', () => {
   console.log('\n🛑 Arrêt du serveur...');
   clearInterval(saveInterval);
-  scheduleAutoSave().then(() => {
+  scheduleAutoSave(true).then(() => {
     process.exit(0);
   });
 });
