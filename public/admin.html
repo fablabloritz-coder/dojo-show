@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1920">
+  <title>DOJO SHOW 2.0 — Admin</title>
+  <link rel="stylesheet" href="/css/admin.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&family=Roboto:wght@400;500;700&family=Poppins:wght@400;500;600;700&family=Montserrat:wght@400;500;600;700&family=Orbitron:wght@400;500;700&family=Press+Start+2P&family=Raleway:wght@400;500;600;700&family=Oswald:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<!-- ═══ TOPBAR ═══ -->
+<header class="topbar">
+  <div class="topbar-left">
+    <span class="logo">⚔ DOJO<span class="logo-accent">SHOW</span> 2.0</span>
+  </div>
+  <div class="topbar-center">
+    <button class="btn btn-primary" onclick="openCreateModal()">＋ Nouveau Match</button>
+    <button class="btn btn-secondary" onclick="openBracketModal()">🏆 Bracket</button>
+    <button class="btn btn-secondary" onclick="openSettings()">⚙ Paramètres</button>
+    <div class="separator"></div>
+    <div class="layout-selector">
+      <label>Grille :</label>
+      <select id="layoutSelect" onchange="changeLayout(this.value)">
+        <option value="1x1">1×1</option>
+        <option value="1x2">1×2</option>
+        <option value="1x3">1×3</option>
+        <option value="2x1">2×1</option>
+        <option value="2x2" selected>2×2</option>
+        <option value="2x3">2×3</option>
+        <option value="3x1">3×1</option>
+        <option value="3x2">3×2</option>
+        <option value="3x3">3×3</option>
+      </select>
+    </div>
+    <div class="separator"></div>
+    <div class="display-mode-selector">
+      <button class="btn btn-mode active" data-mode="matches" onclick="setDisplayMode('matches')">📺 Matchs</button>
+      <button class="btn btn-mode" data-mode="waiting" onclick="setDisplayMode('waiting')">🚉 Attente</button>
+      <button class="btn btn-mode" data-mode="bracket" onclick="setDisplayMode('bracket')">🏆 Bracket</button>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <label class="toggle-sncf">
+      <input type="checkbox" id="sncfBlueToggle" onchange="toggleSNCFBlue(this.checked)">
+      <span>Mode SNCF Bleu</span>
+    </label>
+    <button class="btn btn-accent" onclick="openDisplayWindow()">🖥 Ouvrir Affichage</button>
+  </div>
+</header>
+
+<!-- ═══ MAIN 3-COLUMN LAYOUT ═══ -->
+<main class="main-layout">
+
+  <!-- LEFT: Preview + Settings -->
+  <aside class="panel panel-left">
+    <section class="preview-section">
+      <h3 class="panel-title">📺 Aperçu spectateur</h3>
+      <div class="preview-container">
+        <iframe id="previewFrame" src="/display.html?preview=1"></iframe>
+      </div>
+    </section>
+    <section class="font-settings">
+      <h3 class="panel-title">🔤 Polices & Tailles <span class="profile-badge" id="profileBadge">2×2</span></h3>
+
+      <!-- Avatar size (global, not per-layout) -->
+      <div class="slider-group" style="margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--purple-glow)">
+        <label>👤 Taille avatars <span id="valAvatarSize">32</span>px <small style="color:#888">(0 = masqué)</small></label>
+        <input type="range" min="0" max="80" step="4" value="32" id="sliderAvatarSize" oninput="updateAvatarSize(this.value)">
+      </div>
+
+      <!-- Accordion: Matchs -->
+      <div class="font-accordion">
+        <div class="font-accordion-header open" onclick="toggleFontAccordion(this)">
+          <span>🎮 Vue Matchs</span><span class="accordion-arrow">▼</span>
+        </div>
+        <div class="font-accordion-body open">
+          <div class="slider-group">
+            <label>Titre match <span id="valMatchTitle">20</span>px</label>
+            <input type="range" min="8" max="48" value="20" id="sliderMatchTitle" oninput="updateFont('matchTitle', this.value)">
+          </div>
+          <div class="slider-group">
+            <label>Nom joueur <span id="valPlayerName">22</span>px</label>
+            <input type="range" min="8" max="48" value="22" id="sliderPlayerName" oninput="updateFont('playerName', this.value)">
+          </div>
+          <div class="slider-group">
+            <label>Score <span id="valScore">42</span>px</label>
+            <input type="range" min="12" max="80" value="42" id="sliderScore" oninput="updateFont('score', this.value)">
+          </div>
+          <div class="slider-group">
+            <label>Timer <span id="valTimer">16</span>px</label>
+            <input type="range" min="8" max="36" value="16" id="sliderTimer" oninput="updateFont('timer', this.value)">
+          </div>
+          <div class="slider-group">
+            <label>En-tête section <span id="valHeader">18</span>px</label>
+            <input type="range" min="8" max="36" value="18" id="sliderHeader" oninput="updateFont('header', this.value)">
+          </div>
+          <div class="slider-group">
+            <label>File d'attente <span id="valQueue">16</span>px</label>
+            <input type="range" min="8" max="36" value="16" id="sliderQueue" oninput="updateFont('queue', this.value)">
+          </div>
+        </div>
+      </div>
+
+      <!-- Accordion: Attente -->
+      <div class="font-accordion">
+        <div class="font-accordion-header" onclick="toggleFontAccordion(this)">
+          <span>🚉 Vue Attente</span><span class="accordion-arrow">▼</span>
+        </div>
+        <div class="font-accordion-body">
+          <div class="slider-group">
+            <label>En-tête tableau <span id="valSncfHeader">22</span>px</label>
+            <input type="range" min="10" max="40" value="22" id="sliderSncfHeader" oninput="updateFont('sncfHeader', this.value)">
+          </div>
+          <div class="slider-group">
+            <label>Lignes (joueurs) <span id="valSncfRow">16</span>px</label>
+            <input type="range" min="10" max="36" value="16" id="sliderSncfRow" oninput="updateFont('sncfRow', this.value)">
+          </div>
+          <div class="slider-group">
+            <label>Nom du jeu <span id="valSncfGame">15</span>px</label>
+            <input type="range" min="8" max="32" value="15" id="sliderSncfGame" oninput="updateFont('sncfGame', this.value)">
+          </div>
+          <div class="slider-group">
+            <label>Statut / Badge <span id="valSncfStatus">14</span>px</label>
+            <input type="range" min="8" max="28" value="14" id="sliderSncfStatus" oninput="updateFont('sncfStatus', this.value)">
+          </div>
+        </div>
+      </div>
+
+      <!-- Accordion: Bracket -->
+      <div class="font-accordion">
+        <div class="font-accordion-header" onclick="toggleFontAccordion(this)">
+          <span>🏆 Vue Bracket</span><span class="accordion-arrow">▼</span>
+        </div>
+        <div class="font-accordion-body">
+          <div class="slider-group">
+            <label>Titre bracket <span id="valBracketTitle">24</span>px</label>
+            <input type="range" min="12" max="48" value="24" id="sliderBracketTitle" oninput="updateFont('bracketTitle', this.value)">
+          </div>
+          <div class="slider-group">
+            <label>Nom joueur <span id="valBracketName">14</span>px</label>
+            <input type="range" min="8" max="28" value="14" id="sliderBracketName" oninput="updateFont('bracketName', this.value)">
+          </div>
+          <div class="slider-group">
+            <label>Score <span id="valBracketScore">14</span>px</label>
+            <input type="range" min="8" max="28" value="14" id="sliderBracketScore" oninput="updateFont('bracketScore', this.value)">
+          </div>
+          <div class="slider-group">
+            <label>Label round <span id="valBracketRound">13</span>px</label>
+            <input type="range" min="8" max="24" value="13" id="sliderBracketRound" oninput="updateFont('bracketRound', this.value)">
+          </div>
+        </div>
+      </div>
+    </section>
+    
+    <!-- Tournament Automation Section -->
+    <section class="tournament-settings">
+      <h3 class="panel-title">⚙ Automatisation Tournoi</h3>
+      
+      <div class="tournament-controls">
+        <div class="tournament-row">
+          <label class="tournament-toggle">
+            <input type="checkbox" id="autoTournamentToggle" onchange="toggleAutoTournament(this.checked)">
+            <span class="toggle-switch"></span>
+            Mode Tournoi Automatisé
+          </label>
+        </div>
+        
+        <div class="tournament-status" id="tournamentStatus">
+          Mode manuel actif
+        </div>
+        
+        <div class="tournament-actions" id="tournamentActions" style="display: none;">
+          <div class="tournament-round-controls" id="tournamentRounds">
+            <!-- Buttons will be generated dynamically -->
+          </div>
+          
+          <div class="tournament-info">
+            <small>Les matchs sont créés automatiquement depuis le bracket. Les résultats mettent à jour le bracket en temps réel.</small>
+          </div>
+        </div>
+      </div>
+    </section>
+    
+    <!-- Backup & Restore Section -->
+    <section class="backup-settings">
+      <h3 class="panel-title">💾 Sauvegarde & Restauration</h3>
+      
+      <div class="backup-controls">
+        <div class="backup-row">
+          <input type="text" id="backupName" placeholder="Nom du backup (optionnel)" class="backup-input">
+          <button class="btn btn-primary btn-sm" onclick="createBackup()">💾 Sauvegarder</button>
+        </div>
+        
+        <div class="backup-status" id="backupStatus"></div>
+        
+        <div class="backup-list-header">
+          <span>📁 Sauvegardes disponibles</span>
+          <button class="btn btn-secondary btn-xs" onclick="refreshBackupList()">🔄</button>
+        </div>
+        
+        <div class="backup-list" id="backupList">
+          <div class="backup-item-empty">Aucune sauvegarde trouvée</div>
+        </div>
+      </div>
+    </section>
+  </aside>
+
+  <!-- CENTER: Active Matches Grid -->
+  <section class="panel panel-center">
+    <div class="center-header">
+      <h2 class="section-title">⚡ Matchs actifs</h2>
+      <span class="match-count" id="activeCount">0</span>
+    </div>
+    <div id="matchesGrid" class="matches-grid">
+      <div class="empty-state">Aucun match actif. Créez un match ou activez-en un depuis la file d'attente.</div>
+    </div>
+  </section>
+
+  <!-- RIGHT: Queue + History -->
+  <aside class="panel panel-right">
+    <section class="queue-section">
+      <h3 class="panel-title">⏳ File d'attente <span class="match-count" id="queueCount">0</span></h3>
+      <div id="queueList" class="queue-list">
+        <div class="empty-state-sm">Aucun match en attente</div>
+      </div>
+    </section>
+    <section class="history-section">
+      <div class="history-header">
+        <h3 class="panel-title">📜 Historique</h3>
+        <div class="history-actions">
+          <button class="btn btn-xs" onclick="exportHistory('html')">HTML</button>
+          <button class="btn btn-xs" onclick="exportHistory('csv')">CSV</button>
+          <button class="btn btn-xs btn-danger" onclick="clearHistory()">Vider</button>
+        </div>
+      </div>
+      <div id="historyList" class="history-list">
+        <div class="empty-state-sm">Aucun match terminé</div>
+      </div>
+    </section>
+  </aside>
+</main>
+
+<!-- ═══ MODAL: CREATE MATCH ═══ -->
+<div class="modal-overlay" id="modalCreate">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Nouveau Match</h3>
+      <button class="modal-close" onclick="closeModal('modalCreate')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Jeu</label>
+        <input type="text" id="inputGame" list="gamesList" placeholder="Ex: Street Fighter 6">
+        <datalist id="gamesList"></datalist>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Joueur 1</label>
+          <input type="text" id="inputPlayer1" list="playersList" placeholder="Nom joueur 1">
+        </div>
+        <div class="form-group">
+          <label>Joueur 2</label>
+          <input type="text" id="inputPlayer2" list="playersList" placeholder="Nom joueur 2">
+        </div>
+      </div>
+      <datalist id="playersList"></datalist>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Station / Setup</label>
+          <input type="text" id="inputStation" placeholder="Ex: Setup A">
+        </div>
+        <div class="form-group">
+          <label>Round</label>
+          <input type="text" id="inputRound" placeholder="Ex: Winners R1">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Statut initial</label>
+        <select id="inputStatus">
+          <option value="waiting">En attente</option>
+          <option value="active">Actif immédiatement</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Timer d'appel (secondes)</label>
+        <input type="number" id="inputTimerDuration" value="120" min="10" max="600" step="10">
+      </div>
+      <div class="form-group form-group-inline">
+        <label class="toggle-twitch">
+          <input type="checkbox" id="inputStreaming">
+          <svg class="twitch-icon" viewBox="0 0 24 24" width="18" height="18"><path fill="#9146FF" d="M11.64 5.93H13.07V10.21H11.64M15.57 5.93H17V10.21H15.57M7 2L3.43 5.57V18.43H7.71V22L11.29 18.43H14.14L20.57 12V2M19.14 11.29L16.29 14.14H13.43L10.93 16.64V14.14H7.71V3.43H19.14Z"/></svg>
+          <span>Stream Twitch</span>
+        </label>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modalCreate')">Annuler</button>
+      <button class="btn btn-primary" onclick="createMatch()">Créer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: BRACKET ═══ -->
+<div class="modal-overlay" id="modalBracket">
+  <div class="modal modal-large">
+    <div class="modal-header">
+      <h3>🏆 Gestion Bracket</h3>
+      <button class="modal-close" onclick="closeModal('modalBracket')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Nom du bracket</label>
+        <input type="text" id="inputBracketName" placeholder="Ex: Winners Bracket">
+      </div>
+      <div class="form-group">
+        <label>Joueurs (un par ligne)</label>
+        <textarea id="inputBracketPlayers" rows="8" placeholder="Joueur1&#10;Joueur2&#10;Joueur3&#10;..."></textarea>
+      </div>
+      <button class="btn btn-primary" onclick="generateBracket()">Générer Bracket</button>
+      <div id="bracketPreview" class="bracket-preview"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modalBracket')">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/accent-color.js"></script>
+<script src="/js/admin.js"></script>
+</body>
+</html>

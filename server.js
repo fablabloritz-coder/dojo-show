@@ -1,0 +1,1067 @@
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+const path = require('path');
+const fs = require('fs').promises;
+const fsSync = require('fs');
+
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: '*' } });
+
+app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.json());
+
+// ─── STATE ──────────────────────────────────────────────
+function genId() {
+  return Date.now().toString(36) + Math.random().toString(36).substr(2, 6);
+}
+
+const defaultFontProfile = (scale = 1) => ({
+  matchTitle: Math.round(20 * scale),
+  playerName: Math.round(22 * scale),
+  score: Math.round(42 * scale),
+  timer: Math.round(16 * scale),
+  header: Math.round(18 * scale),
+  queue: Math.round(16 * scale),
+  // Attente (SNCF)
+  sncfHeader: Math.round(22 * scale),
+  sncfRow: Math.round(16 * scale),
+  sncfGame: Math.round(15 * scale),
+  sncfStatus: Math.round(14 * scale),
+  // Bracket
+  bracketTitle: Math.round(24 * scale),
+  bracketName: Math.round(14 * scale),
+  bracketScore: Math.round(14 * scale),
+  bracketRound: Math.round(13 * scale),
+});
+
+let state = {
+  matches: [],
+  history: [],
+  settings: {
+    displayMode: 'matches', // matches | waiting | bracket
+    layout: { rows: 2, cols: 2 },
+    sncfBlueMode: false,
+    avatarSize: 32,
+    accentColor: '#7b2ff7',
+    fontFamily: 'Inter',
+    autoRotation: 0,
+    highlightMatchId: null,
+    fontProfiles: {
+      '1x1': defaultFontProfile(2.0),
+      '1x2': defaultFontProfile(1.6),
+      '1x3': defaultFontProfile(1.3),
+      '2x1': defaultFontProfile(1.6),
+      '2x2': defaultFontProfile(1.0),
+      '2x3': defaultFontProfile(0.85),
+      '3x1': defaultFontProfile(1.3),
+      '3x2': defaultFontProfile(0.85),
+      '3x3': defaultFontProfile(0.7),
+    },
+  },
+  bracket: { rounds: [], name: '', autoTournament: false },
+  startgg: { apiKey: '', tournamentSlug: '' },
+  games: [],
+  players: [],  // { id, name, avatar }
+  gameSettings: {},  // { gameName: { color, image, imageOpacity } }
+};
+
+const DEFAULT_AVATAR = 'data:image/svg+xml;base64,' + Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80"><rect width="80" height="80" rx="40" fill="#7b2ff7"/><text x="40" y="52" text-anchor="middle" fill="white" font-size="32" font-family="sans-serif">?</text></svg>').toString('base64');
+
+const FONT_WHITELIST = ['Inter', 'Roboto', 'Poppins', 'Montserrat', 'Orbitron', 'Press Start 2P', 'Raleway', 'Oswald'];
+
+function getClientState(includeSecrets = false) {
+  const now = Date.now();
+  return {
+    matches: state.matches.map(m => ({
+      ...m,
+      timerElapsed: m.timerAccumulated + (m.timerRunning ? now - m.timerStartedAt : 0),
+    })),
+    history: state.history,
+    settings: state.settings,
+    bracket: state.bracket,
+    startgg: includeSecrets
+      ? { apiKey: state.startgg.apiKey, tournamentSlug: state.startgg.tournamentSlug }
+      : { apiKey: '', tournamentSlug: state.startgg.tournamentSlug },
+    games: state.games,
+    players: state.players,
+    gameSettings: state.gameSettings,
+    serverTime: now,
+  };
+}
+
+// ─── PERSISTENCE ────────────────────────────────────────
+const DATA_DIR = path.join(__dirname, 'data');
+const STATE_FILE = path.join(DATA_DIR, 'state.json');
+
+function ensureDataDir() {
+  if (!fsSync.existsSync(DATA_DIR)) {
+    fsSync.mkdirSync(DATA_DIR, { recursive: true });
+  }
+}
+
+function sanitizeFilename(name) {
+  if (!name) return '';
+  return name
+    .replace(/[^a-zA-Z0-9\s\-_]/g, '')
+    .replace(/\s+/g, '-')
+    .substring(0, 50);
+}
+
+async function saveState() {
+  try {
+    ensureDataDir();
+    const data = {
+      ...state,
+      savedAt: new Date().toISOString(),
+      version: '2.0',
+    };
+    await fs.writeFile(STATE_FILE, JSON.stringify(data, null, 2));
+    console.log(`✅ État sauvegardé: ${new Date().toLocaleTimeString()}`);
+  } catch (error) {
+    console.error('❌ Erreur sauvegarde:', error.message);
+  }
+}
+
+function loadState() {
+  try {
+    if (!fsSync.existsSync(STATE_FILE)) return false;
+    const data = JSON.parse(fsSync.readFileSync(STATE_FILE, 'utf8'));
+    
+    // Restore state but reset runtime properties
+    state.matches = (data.matches || []).map(m => ({
+      ...m,
+      timerRunning: false,
+      timerStartedAt: 0,
+    }));
+    state.history = data.history || [];
+    state.settings = data.settings || state.settings;
+    // Ensure new settings fields have defaults
+    if (!state.settings.accentColor) state.settings.accentColor = '#7b2ff7';
+    if (!state.settings.fontFamily) state.settings.fontFamily = 'Inter';
+    if (state.settings.autoRotation === undefined) state.settings.autoRotation = 0;
+    if (state.settings.highlightMatchId === undefined) state.settings.highlightMatchId = null;
+    state.bracket = data.bracket || state.bracket;
+    state.startgg = data.startgg || state.startgg;
+    state.games = data.games || [];
+    state.players = data.players || [];
+    state.gameSettings = data.gameSettings || {};
+    
+    console.log(`✅ État restauré depuis ${data.savedAt || 'date inconnue'}`);
+    return true;
+  } catch (error) {
+    console.error('❌ Erreur restauration:', error.message);
+    return false;
+  }
+}
+
+function broadcast() {
+  io.emit('state:full', getClientState());
+}
+
+// ─── TOURNAMENT HELPERS ─────────────────────────────────
+function findBracketMatchByPlayers(player1Name, player2Name) {
+  for (let roundIdx = 0; roundIdx < state.bracket.rounds.length; roundIdx++) {
+    const round = state.bracket.rounds[roundIdx];
+    for (let matchIdx = 0; matchIdx < round.length; matchIdx++) {
+      const bm = round[matchIdx];
+      if ((bm.player1 === player1Name && bm.player2 === player2Name) ||
+          (bm.player1 === player2Name && bm.player2 === player1Name)) {
+        return { roundIdx, matchIdx, match: bm };
+      }
+    }
+  }
+  return null;
+}
+
+function createMatchesFromBracket(roundIdx) {
+  if (!state.bracket.rounds[roundIdx]) return [];
+  
+  const round = state.bracket.rounds[roundIdx];
+  const createdMatches = [];
+  
+  for (const bm of round) {
+    // Skip if already decided or has BYE
+    if (bm.winner || bm.player1 === 'BYE' || bm.player2 === 'BYE' || bm.player1 === '?' || bm.player2 === '?') {
+      continue;
+    }
+    
+    // Check if match already exists
+    const existingMatch = state.matches.find(m => 
+      (m.player1.name === bm.player1 && m.player2.name === bm.player2) ||
+      (m.player1.name === bm.player2 && m.player2.name === bm.player1)
+    );
+    
+    if (!existingMatch) {
+      const newMatch = {
+        id: genId(),
+        game: state.games[0] || 'Game',
+        player1: { name: bm.player1, present: false },
+        player2: { name: bm.player2, present: false },
+        score1: 0,
+        score2: 0,
+        status: 'waiting',
+        phase: 'waiting',
+        winner: null,
+        station: '',
+        round: `Round ${roundIdx + 1}`,
+        streaming: false,
+        order: state.matches.length,
+        timerDuration: 120,
+        timerAccumulated: 0,
+        timerRunning: false,
+        timerStartedAt: 0,
+        bracketMatch: { roundIdx, matchIdx: round.indexOf(bm) }
+      };
+      
+      state.matches.push(newMatch);
+      createdMatches.push(newMatch);
+    }
+  }
+  
+  return createdMatches;
+}
+
+function updateBracketFromMatch(match) {
+  if (!match.bracketMatch || match.winner === null) return false;
+  
+  const { roundIdx, matchIdx } = match.bracketMatch;
+  if (!state.bracket.rounds[roundIdx] || !state.bracket.rounds[roundIdx][matchIdx]) return false;
+  
+  const bm = state.bracket.rounds[roundIdx][matchIdx];
+  bm.winner = match.winner;
+  bm.score1 = match.score1;
+  bm.score2 = match.score2;
+  
+  // Advance winner to next round
+  const nextRound = roundIdx + 1;
+  if (state.bracket.rounds[nextRound]) {
+    const nextMatchIdx = Math.floor(matchIdx / 2);
+    const slot = matchIdx % 2 === 0 ? 'player1' : 'player2';
+    const winnerName = match.winner === 1 ? match.player1.name : match.player2.name;
+    if (state.bracket.rounds[nextRound][nextMatchIdx]) {
+      state.bracket.rounds[nextRound][nextMatchIdx][slot] = winnerName;
+    }
+  }
+  
+  return true;
+}
+
+// ─── SOCKET.IO ──────────────────────────────────────────
+io.on('connection', (socket) => {
+  console.log(`Client connected: ${socket.id}`);
+  socket.emit('state:full', getClientState());
+
+  // Allow settings page to request secrets
+  socket.on('request:fullState', () => {
+    socket.emit('state:full', getClientState(true));
+  });
+
+  // --- Match CRUD ---
+  socket.on('match:create', (data) => {
+    const initialStatus = data.status || 'waiting';
+    const match = {
+      id: genId(),
+      game: data.game || 'Autre',
+      player1: { name: data.player1 || 'Joueur 1', present: false },
+      player2: { name: data.player2 || 'Joueur 2', present: false },
+      score1: 0,
+      score2: 0,
+      status: initialStatus,
+      winner: null,
+      phase: initialStatus === 'active' ? 'calling' : null,
+      timerRunning: initialStatus === 'active',
+      timerStartedAt: initialStatus === 'active' ? Date.now() : 0,
+      timerAccumulated: 0,
+      timerDuration: Math.max(10, Math.min(600, parseInt(data.timerDuration) || 120)),
+      station: data.station || '',
+      round: data.round || '',
+      streaming: !!data.streaming,
+      order: state.matches.filter(m => m.status === initialStatus).length,
+      createdAt: Date.now(),
+    };
+    state.matches.push(match);
+    if (data.game && !state.games.includes(data.game)) {
+      state.games.push(data.game);
+    }
+    broadcast();
+  });
+
+  socket.on('match:update', (data) => {
+    const idx = state.matches.findIndex(m => m.id === data.id);
+    if (idx === -1) return;
+    const match = state.matches[idx];
+    // Whitelist updatable fields
+    const allowed = ['game', 'station', 'round', 'score1', 'score2', 'status', 'order', 'streaming'];
+    for (const key of allowed) {
+      if (data[key] !== undefined) {
+        match[key] = key === 'streaming' ? !!data[key] : data[key];
+      }
+    }
+    if (data.player1) match.player1 = { ...match.player1, ...data.player1 };
+    if (data.player2) match.player2 = { ...match.player2, ...data.player2 };
+    broadcast();
+  });
+
+  socket.on('match:delete', (data) => {
+    state.matches = state.matches.filter(m => m.id !== data.id);
+    broadcast();
+  });
+
+  socket.on('match:presence', (data) => {
+    const match = state.matches.find(m => m.id === data.id);
+    if (!match || match.phase !== 'calling') return;
+    if (data.player === 1) match.player1.present = !match.player1.present;
+    if (data.player === 2) match.player2.present = !match.player2.present;
+    broadcast();
+  });
+
+  socket.on('match:score', (data) => {
+    const match = state.matches.find(m => m.id === data.id);
+    if (!match || match.phase !== 'playing') return;
+    if (data.player === 1) match.score1 = Math.max(0, match.score1 + data.delta);
+    if (data.player === 2) match.score2 = Math.max(0, match.score2 + data.delta);
+    broadcast();
+  });
+
+  socket.on('match:activate', (data) => {
+    const match = state.matches.find(m => m.id === data.id);
+    if (!match) return;
+    match.status = 'active';
+    match.phase = 'calling';
+    match.player1.present = false;
+    match.player2.present = false;
+    match.timerRunning = true;
+    match.timerStartedAt = Date.now();
+    match.timerAccumulated = 0;
+    broadcast();
+  });
+
+  socket.on('match:toQueue', (data) => {
+    const match = state.matches.find(m => m.id === data.id);
+    if (!match) return;
+    match.status = 'waiting';
+    match.phase = null;
+    match.winner = null;
+    if (match.timerRunning) {
+      match.timerAccumulated += Date.now() - match.timerStartedAt;
+    }
+    match.timerRunning = false;
+    match.timerAccumulated = 0;
+    broadcast();
+  });
+
+  // --- Match Workflow: Launch, Declare, Validate, Forfeit, Cancel, Restore ---
+  socket.on('match:launch', (data) => {
+    const match = state.matches.find(m => m.id === data.id);
+    if (!match || match.phase !== 'calling') return;
+    if (!match.player1.present || !match.player2.present) return;
+    match.phase = 'playing';
+    if (match.timerRunning) {
+      match.timerAccumulated += Date.now() - match.timerStartedAt;
+    }
+    match.timerRunning = true;
+    match.timerStartedAt = Date.now();
+    match.timerAccumulated = 0;
+    broadcast();
+  });
+
+  socket.on('match:declareWinner', (data) => {
+    const match = state.matches.find(m => m.id === data.id);
+    if (!match || (match.phase !== 'playing' && match.phase !== 'calling')) return;
+    if (data.winner !== 1 && data.winner !== 2) return;
+    match.phase = 'decided';
+    match.winner = data.winner; // 1 or 2
+    if (match.timerRunning) {
+      match.timerAccumulated += Date.now() - match.timerStartedAt;
+      match.timerRunning = false;
+    }
+    // Mark match as part of bracket if in auto tournament mode
+    if (state.bracket.autoTournament && match.bracketMatch) {
+      match.bracketMatch = true;
+    }
+    broadcast();
+  });
+
+  socket.on('match:undeclare', (data) => {
+    const match = state.matches.find(m => m.id === data.id);
+    if (!match || match.phase !== 'decided') return;
+    match.phase = 'playing';
+    match.winner = null;
+    broadcast();
+  });
+
+  socket.on('match:validate', (data) => {
+    const match = state.matches.find(m => m.id === data.id);
+    if (!match || match.phase !== 'decided') return;
+    
+    // Update bracket if in auto tournament mode
+    if (state.bracket.autoTournament && match.bracketMatch) {
+      updateBracketFromMatch(match);
+    }
+    
+    state.history.unshift({
+      id: genId(),
+      game: match.game,
+      player1: match.player1.name,
+      player2: match.player2.name,
+      score1: match.score1,
+      score2: match.score2,
+      winner: match.winner,
+      station: match.station,
+      round: match.round,
+      streaming: match.streaming || false,
+      finishedAt: Date.now(),
+    });
+    state.matches = state.matches.filter(m => m.id !== match.id);
+    // Clear highlight if this match was highlighted
+    if (state.settings.highlightMatchId === match.id) state.settings.highlightMatchId = null;
+    broadcast();
+  });
+
+  socket.on('match:forfeit', (data) => {
+    const match = state.matches.find(m => m.id === data.id);
+    if (!match || match.phase !== 'calling') return;
+    const p1 = match.player1.present;
+    const p2 = match.player2.present;
+    if (p1 && p2) return;
+    if (!p1 && !p2) return;
+    if (match.timerRunning) {
+      match.timerAccumulated += Date.now() - match.timerStartedAt;
+      match.timerRunning = false;
+    }
+    match.phase = 'decided';
+    match.winner = p1 ? 1 : 2;
+    broadcast();
+  });
+
+  socket.on('match:toggleStream', (data) => {
+    const match = state.matches.find(m => m.id === data.id);
+    if (!match) return;
+    match.streaming = !match.streaming;
+    broadcast();
+  });
+
+  socket.on('match:cancel', (data) => {
+    const match = state.matches.find(m => m.id === data.id);
+    if (!match) return;
+    if (state.settings.highlightMatchId === match.id) state.settings.highlightMatchId = null;
+    state.matches = state.matches.filter(m => m.id !== match.id);
+    broadcast();
+  });
+
+  socket.on('match:restore', (data) => {
+    const hIdx = state.history.findIndex(h => h.id === data.id);
+    if (hIdx === -1) return;
+    const h = state.history[hIdx];
+    const match = {
+      id: genId(),
+      game: h.game,
+      player1: { name: h.player1, present: true },
+      player2: { name: h.player2, present: true },
+      score1: h.score1,
+      score2: h.score2,
+      status: 'active',
+      winner: null,
+      phase: 'playing',
+      timerRunning: false,
+      timerStartedAt: 0,
+      timerAccumulated: 0,
+      timerDuration: 120,
+      station: h.station || '',
+      round: h.round || '',
+      streaming: !!h.streaming,
+      order: state.matches.filter(m => m.status === 'active').length,
+      createdAt: Date.now(),
+    };
+    state.matches.push(match);
+    state.history.splice(hIdx, 1);
+    broadcast();
+  });
+
+  // --- Timer ---
+  socket.on('timer:start', (data) => {
+    const match = state.matches.find(m => m.id === data.id);
+    if (!match || match.timerRunning) return;
+    match.timerRunning = true;
+    match.timerStartedAt = Date.now();
+    broadcast();
+  });
+
+  socket.on('timer:stop', (data) => {
+    const match = state.matches.find(m => m.id === data.id);
+    if (!match || !match.timerRunning) return;
+    match.timerAccumulated += Date.now() - match.timerStartedAt;
+    match.timerRunning = false;
+    broadcast();
+  });
+
+  socket.on('timer:reset', (data) => {
+    const match = state.matches.find(m => m.id === data.id);
+    if (!match) return;
+    match.timerRunning = false;
+    match.timerStartedAt = 0;
+    match.timerAccumulated = 0;
+    broadcast();
+  });
+
+  // --- Settings ---
+  socket.on('settings:layout', (data) => {
+    state.settings.layout = { rows: data.rows, cols: data.cols };
+    broadcast();
+  });
+
+  socket.on('settings:displayMode', (data) => {
+    state.settings.displayMode = data.mode;
+    broadcast();
+  });
+
+  socket.on('settings:highlight', (data) => {
+    const matchId = data.matchId || null;
+    if (matchId && !state.matches.find(m => m.id === matchId)) return;
+    state.settings.highlightMatchId = matchId;
+    broadcast();
+  });
+
+  socket.on('settings:sncfBlue', (data) => {
+    state.settings.sncfBlueMode = !!data.enabled;
+    broadcast();
+  });
+
+  socket.on('settings:avatarSize', (data) => {
+    const size = parseInt(data);
+    if (!isNaN(size) && size >= 0 && size <= 80) {
+      state.settings.avatarSize = size;
+    }
+    broadcast();
+  });
+
+  socket.on('settings:accentColor', (data) => {
+    const hex = (data || '').trim();
+    if (/^#[0-9a-fA-F]{6}$/.test(hex)) {
+      state.settings.accentColor = hex;
+      broadcast();
+    }
+  });
+
+  socket.on('settings:fontFamily', (data) => {
+    const font = (data || '').trim();
+    if (FONT_WHITELIST.includes(font)) {
+      state.settings.fontFamily = font;
+      broadcast();
+    }
+  });
+
+  socket.on('settings:autoRotation', (data) => {
+    const seconds = parseInt(data);
+    if (!isNaN(seconds) && seconds >= 0 && seconds <= 300) {
+      state.settings.autoRotation = seconds;
+      broadcast();
+    }
+  });
+
+  socket.on('games:updateSettings', (data) => {
+    const name = (data.name || '').trim();
+    if (!name || !state.games.includes(name)) return;
+    const gs = state.gameSettings[name] || {};
+    if (data.color !== undefined) {
+      gs.color = /^#[0-9a-fA-F]{6}$/.test(data.color) ? data.color : '';
+    }
+    if (data.image !== undefined) {
+      gs.image = (data.image && data.image.length < 2000000 && /^data:image\//.test(data.image)) ? data.image : '';
+    }
+    if (data.imageOpacity !== undefined) {
+      gs.imageOpacity = Math.max(0, Math.min(1, parseFloat(data.imageOpacity) || 0.3));
+    }
+    state.gameSettings[name] = gs;
+    broadcast();
+  });
+
+  socket.on('settings:font', (data) => {
+    const FONT_PROPS = ['matchTitle','playerName','score','timer','header','queue','vs','sncfHeader','sncfRow','sncfGame','sncfStatus','bracketTitle','bracketName','bracketScore','bracketRound'];
+    const key = `${state.settings.layout.rows}x${state.settings.layout.cols}`;
+    if (state.settings.fontProfiles[key] && FONT_PROPS.includes(data.property)) {
+      state.settings.fontProfiles[key][data.property] = data.value;
+    }
+    broadcast();
+  });
+
+  // --- Bracket ---
+  socket.on('bracket:update', (data) => {
+    state.bracket = data;
+    broadcast();
+  });
+
+  socket.on('bracket:generate', (data) => {
+    const players = data.players || [];
+    const name = data.name || 'Bracket';
+    // Pad to next power of 2
+    let size = 1;
+    while (size < players.length) size *= 2;
+    const padded = [...players];
+    while (padded.length < size) padded.push(null); // BYE
+
+    const rounds = [];
+    // Round 1
+    const r1 = [];
+    for (let i = 0; i < padded.length; i += 2) {
+      const isBye = !padded[i] || !padded[i + 1];
+      r1.push({
+        id: genId(),
+        player1: padded[i] || 'BYE',
+        player2: padded[i + 1] || 'BYE',
+        score1: 0, score2: 0,
+        winner: isBye ? (padded[i] ? 1 : 2) : null,
+      });
+    }
+    rounds.push(r1);
+
+    // Subsequent rounds
+    let prev = r1;
+    while (prev.length > 1) {
+      const round = [];
+      for (let i = 0; i < prev.length; i += 2) {
+        round.push({
+          id: genId(),
+          player1: prev[i].winner ? (prev[i].winner === 1 ? prev[i].player1 : prev[i].player2) : '?',
+          player2: prev[i + 1] && prev[i + 1].winner ? (prev[i + 1].winner === 1 ? prev[i + 1].player1 : prev[i + 1].player2) : '?',
+          score1: 0, score2: 0,
+          winner: null,
+        });
+      }
+      rounds.push(round);
+      prev = round;
+    }
+
+    state.bracket = { rounds, name };
+    broadcast();
+  });
+
+  socket.on('bracket:matchResult', (data) => {
+    const { roundIdx, matchIdx, winner } = data;
+    if (!state.bracket.rounds[roundIdx] || !state.bracket.rounds[roundIdx][matchIdx]) return;
+    const bm = state.bracket.rounds[roundIdx][matchIdx];
+    bm.winner = winner;
+    if (data.score1 !== undefined) bm.score1 = data.score1;
+    if (data.score2 !== undefined) bm.score2 = data.score2;
+
+    // Advance winner to next round
+    const nextRound = roundIdx + 1;
+    if (state.bracket.rounds[nextRound]) {
+      const nextMatchIdx = Math.floor(matchIdx / 2);
+      const slot = matchIdx % 2 === 0 ? 'player1' : 'player2';
+      const winnerName = winner === 1 ? bm.player1 : bm.player2;
+      if (state.bracket.rounds[nextRound][nextMatchIdx]) {
+        state.bracket.rounds[nextRound][nextMatchIdx][slot] = winnerName;
+      }
+    }
+    broadcast();
+  });
+
+  // --- Start.gg ---
+  socket.on('startgg:configure', (data) => {
+    state.startgg.apiKey = data.apiKey || '';
+    state.startgg.tournamentSlug = data.tournamentSlug || '';
+    broadcast();
+  });
+
+  socket.on('startgg:setData', (data) => {
+    if (data.games) state.games = data.games;
+    if (data.players) {
+      state.players = data.players.map(p => {
+        if (typeof p === 'string') return { id: genId(), name: p, avatar: DEFAULT_AVATAR };
+        return { id: p.id || genId(), name: p.name, avatar: p.avatar || DEFAULT_AVATAR };
+      });
+    }
+    broadcast();
+  });
+
+  // --- Games CRUD ---
+  socket.on('games:add', (data) => {
+    const name = (data.name || '').trim();
+    if (!name || state.games.includes(name)) return;
+    state.games.push(name);
+    broadcast();
+  });
+
+  socket.on('games:delete', (data) => {
+    state.games = state.games.filter(g => g !== data.name);
+    delete state.gameSettings[data.name];
+    broadcast();
+  });
+
+  socket.on('games:rename', (data) => {
+    const oldName = (data.oldName || '').trim();
+    const newName = (data.newName || '').trim();
+    if (!oldName || !newName || oldName === newName) return;
+    if (!state.games.includes(oldName)) return;
+    if (state.games.includes(newName)) return;
+    const idx = state.games.indexOf(oldName);
+    state.games[idx] = newName;
+    // Propagate rename to all matches
+    state.matches.forEach(m => { if (m.game === oldName) m.game = newName; });
+    state.history.forEach(h => { if (h.game === oldName) h.game = newName; });
+    if (state.gameSettings[oldName]) {
+      state.gameSettings[newName] = state.gameSettings[oldName];
+      delete state.gameSettings[oldName];
+    }
+    broadcast();
+  });
+
+  // --- Players CRUD ---
+  socket.on('players:add', (data) => {
+    const name = (data.name || '').trim();
+    if (!name) return;
+    let avatar = DEFAULT_AVATAR;
+    if (data.avatar && data.avatar.length < 500000 && /^data:image\//.test(data.avatar)) {
+      avatar = data.avatar;
+    }
+    state.players.push({ id: genId(), name, avatar });
+    broadcast();
+  });
+
+  socket.on('players:update', (data) => {
+    const player = state.players.find(p => p.id === data.id);
+    if (!player) return;
+    if (data.name) player.name = data.name.trim();
+    if (data.avatar !== undefined) {
+      player.avatar = (data.avatar && data.avatar.length < 500000 && /^data:image\//.test(data.avatar)) ? data.avatar : DEFAULT_AVATAR;
+    }
+    broadcast();
+  });
+
+  socket.on('players:delete', (data) => {
+    state.players = state.players.filter(p => p.id !== data.id);
+    broadcast();
+  });
+
+  // --- Backup & Restore ---
+  socket.on('state:backup', async (data) => {
+    try {
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const sanitizedName = sanitizeFilename(data.name);
+      const filename = sanitizedName ? `backup-${sanitizedName}-${timestamp}.json` : `backup-${timestamp}.json`;
+      const backupPath = path.join(DATA_DIR, filename);
+      
+      ensureDataDir();
+      const backupData = {
+        ...state,
+        savedAt: new Date().toISOString(),
+        version: '2.0',
+        backupName: sanitizedName || 'Manuel',
+        backupType: 'manual',
+      };
+      
+      await fs.writeFile(backupPath, JSON.stringify(backupData, null, 2));
+      socket.emit('backup:success', { filename, path: backupPath });
+      console.log(`✅ Backup créé: ${filename}`);
+    } catch (error) {
+      socket.emit('backup:error', { message: error.message });
+      console.error('❌ Erreur backup:', error.message);
+    }
+  });
+
+  socket.on('state:restore', async (data) => {
+    try {
+      const sanitizedFilename = sanitizeFilename(data.filename);
+      if (!sanitizedFilename || !sanitizedFilename.match(/^backup-.*\.json$/)) {
+        socket.emit('restore:error', { message: 'Nom de fichier invalide' });
+        return;
+      }
+      
+      const backupPath = path.join(DATA_DIR, sanitizedFilename);
+      const backupData = JSON.parse(await fs.readFile(backupPath, 'utf8'));
+      
+      // Restore state but reset runtime properties
+      state.matches = (backupData.matches || []).map(m => ({
+        ...m,
+        timerRunning: false,
+        timerStartedAt: 0,
+      }));
+      state.history = backupData.history || [];
+      state.settings = backupData.settings || state.settings;
+      state.bracket = backupData.bracket || state.bracket;
+      state.startgg = backupData.startgg || state.startgg;
+      state.games = backupData.games || [];
+      state.players = backupData.players || [];
+      state.gameSettings = backupData.gameSettings || {};
+      
+      broadcast();
+      socket.emit('restore:success', { filename: sanitizedFilename, savedAt: backupData.savedAt });
+      console.log(`✅ État restauré depuis: ${sanitizedFilename}`);
+    } catch (error) {
+      socket.emit('restore:error', { message: error.message });
+      console.error('❌ Erreur restauration:', error.message);
+    }
+  });
+
+  socket.on('state:list-backups', async () => {
+    try {
+      ensureDataDir();
+      const files = await fs.readdir(DATA_DIR);
+      const backups = [];
+      
+      for (const f of files.filter(f => f.endsWith('.json') && f.startsWith('backup-'))) {
+        try {
+          const filepath = path.join(DATA_DIR, f);
+          const stats = await fs.stat(filepath);
+          const content = JSON.parse(await fs.readFile(filepath, 'utf8'));
+          backups.push({
+            filename: f,
+            size: stats.size,
+            created: stats.mtime,
+            savedAt: content.savedAt,
+            backupName: content.backupName || 'Sans nom',
+            matchCount: (content.matches || []).length,
+            playerCount: (content.players || []).length,
+          });
+        } catch {
+          // Skip corrupted files
+        }
+      }
+      
+      backups.sort((a, b) => new Date(b.created) - new Date(a.created));
+      socket.emit('backups:list', backups);
+    } catch (error) {
+      socket.emit('backups:error', { message: error.message });
+      console.error('❌ Erreur liste backups:', error.message);
+    }
+  });
+
+  // --- Fake Data Generator ---
+  socket.on('data:generateFake', () => {
+    const fakeGames = ['Street Fighter 6', 'Tekken 8', 'Guilty Gear Strive', 'Super Smash Bros. Ultimate', 'Mortal Kombat 1', 'Dragon Ball FighterZ'];
+    const fakeNames = ['SonicFox', 'MenaRD', 'Tokido', 'Punk', 'Daigo', 'Knee', 'JDCR', 'Arslan Ash', 'MkLeo', 'Tweek', 'Light', 'Sparg0', 'Marss', 'Nairo', 'Leffen', 'HungryBox'];
+    const stations = ['Setup A', 'Setup B', 'Setup C', 'Setup D', 'Stream'];
+    const rounds = ['Winners R1', 'Winners R2', 'Winners QF', 'Winners SF', 'Losers R1', 'Losers R2', 'Grand Final'];
+
+    // Set games
+    state.games = [...fakeGames];
+
+    // Game settings (colors)
+    state.gameSettings = {
+      'Street Fighter 6': { color: '#e74c3c', image: '', imageOpacity: 0.3 },
+      'Tekken 8': { color: '#3498db', image: '', imageOpacity: 0.3 },
+      'Guilty Gear Strive': { color: '#e67e22', image: '', imageOpacity: 0.3 },
+      'Super Smash Bros. Ultimate': { color: '#2ecc71', image: '', imageOpacity: 0.3 },
+      'Mortal Kombat 1': { color: '#f39c12', image: '', imageOpacity: 0.3 },
+      'Dragon Ball FighterZ': { color: '#9b59b6', image: '', imageOpacity: 0.3 },
+    };
+
+    // Set players
+    state.players = fakeNames.map(name => ({ id: genId(), name, avatar: DEFAULT_AVATAR }));
+
+    // Generate active matches (4)
+    const activeMatches = [];
+    for (let i = 0; i < 4; i++) {
+      const p1Idx = i * 2;
+      const p2Idx = i * 2 + 1;
+      activeMatches.push({
+        id: genId(),
+        game: fakeGames[i % fakeGames.length],
+        player1: { name: fakeNames[p1Idx], present: true },
+        player2: { name: fakeNames[p2Idx], present: true },
+        score1: Math.floor(Math.random() * 3),
+        score2: Math.floor(Math.random() * 3),
+        status: 'active',
+        winner: null,
+        phase: 'playing',
+        timerRunning: i < 2,
+        timerStartedAt: i < 2 ? Date.now() - Math.floor(Math.random() * 300000) : 0,
+        timerAccumulated: i >= 2 ? Math.floor(Math.random() * 180000) : 0,
+        timerDuration: 120,
+        station: stations[i],
+        round: rounds[i],
+        streaming: stations[i] === 'Stream',
+        order: i,
+        createdAt: Date.now() - i * 60000,
+      });
+    }
+
+    // Generate waiting matches (4)
+    const waitingMatches = [];
+    for (let i = 0; i < 4; i++) {
+      const p1Idx = 8 + i * 2;
+      const p2Idx = 8 + i * 2 + 1;
+      const st = stations[(i + 2) % stations.length];
+      waitingMatches.push({
+        id: genId(),
+        game: fakeGames[(i + 2) % fakeGames.length],
+        player1: { name: fakeNames[p1Idx % fakeNames.length], present: false },
+        player2: { name: fakeNames[p2Idx % fakeNames.length], present: false },
+        score1: 0,
+        score2: 0,
+        status: 'waiting',
+        winner: null,
+        phase: null,
+        timerRunning: false,
+        timerStartedAt: 0,
+        timerAccumulated: 0,
+        timerDuration: 120,
+        station: st,
+        round: rounds[(i + 4) % rounds.length],
+        streaming: st === 'Stream',
+        order: i,
+        createdAt: Date.now() - (i + 4) * 60000,
+      });
+    }
+
+    state.matches = [...activeMatches, ...waitingMatches];
+
+    // Generate history (3 finished)
+    state.history = [
+      { id: genId(), game: fakeGames[0], player1: 'Tokido', player2: 'Daigo', score1: 3, score2: 1, winner: 1, station: 'Stream', round: 'Winners SF', streaming: true, finishedAt: Date.now() - 600000 },
+      { id: genId(), game: fakeGames[1], player1: 'Knee', player2: 'JDCR', score1: 2, score2: 3, winner: 2, station: 'Setup A', round: 'Winners R1', streaming: false, finishedAt: Date.now() - 1200000 },
+      { id: genId(), game: fakeGames[2], player1: 'SonicFox', player2: 'MenaRD', score1: 3, score2: 0, winner: 1, station: 'Stream', round: 'Grand Final', streaming: true, finishedAt: Date.now() - 1800000 },
+    ];
+
+    // Generate bracket (8 players)
+    const bracketPlayers = fakeNames.slice(0, 8);
+    const bracketRounds = [];
+    const r1 = [];
+    for (let i = 0; i < bracketPlayers.length; i += 2) {
+      r1.push({ id: genId(), player1: bracketPlayers[i], player2: bracketPlayers[i + 1], score1: 0, score2: 0, winner: null });
+    }
+    bracketRounds.push(r1);
+    // R2
+    bracketRounds.push([
+      { id: genId(), player1: '?', player2: '?', score1: 0, score2: 0, winner: null },
+      { id: genId(), player1: '?', player2: '?', score1: 0, score2: 0, winner: null },
+    ]);
+    // Final
+    bracketRounds.push([
+      { id: genId(), player1: '?', player2: '?', score1: 0, score2: 0, winner: null },
+    ]);
+    state.bracket = { rounds: bracketRounds, name: 'Bracket Principal' };
+
+    broadcast();
+  });
+
+  // --- Data Reset ---
+  socket.on('data:reset', (data) => {
+    const validTargets = ['all', 'matches', 'history', 'bracket', 'games', 'players'];
+    const target = data && data.target;
+    if (!target || !validTargets.includes(target)) return;
+
+    if (target === 'all' || target === 'matches') {
+      state.matches = [];
+    }
+    if (target === 'all' || target === 'history') {
+      state.history = [];
+    }
+    if (target === 'all' || target === 'bracket') {
+      state.bracket = { rounds: [], name: '' };
+    }
+    if (target === 'all' || target === 'games') {
+      state.games = [];
+      state.gameSettings = {};
+    }
+    if (target === 'all' || target === 'players') {
+      state.players = [];
+    }
+    if (target === 'all') {
+      state.startgg = { apiKey: '', tournamentSlug: '' };
+    }
+    broadcast();
+  });
+
+  // --- History ---
+  socket.on('history:clear', () => {
+    state.history = [];
+    broadcast();
+  });
+
+  socket.on('disconnect', () => {
+    console.log(`Client disconnected: ${socket.id}`);
+  });
+
+  // --- Tournament Automation ---
+  socket.on('tournament:toggleAuto', (data) => {
+    state.bracket.autoTournament = !state.bracket.autoTournament;
+    broadcast();
+  });
+
+  socket.on('tournament:createRoundMatches', (data) => {
+    if (!state.bracket.autoTournament) return;
+    const roundIdx = data.roundIdx;
+    if (!state.bracket.rounds[roundIdx]) return;
+    
+    const createdMatches = createMatchesFromBracket(roundIdx);
+    socket.emit('tournament:matchesCreated', { 
+      count: createdMatches.length, 
+      round: roundIdx 
+    });
+  });
+
+  socket.on('bracket:syncFromMatch', (data) => {
+    const match = state.matches.find(m => m.id === data.matchId);
+    if (!match || match.phase !== 'decided') return;
+    
+    updateBracketFromMatch(match);
+    socket.emit('bracket:syncCompleted', { matchId: data.matchId });
+  });
+});
+
+// ─── START.GG API PROXY ─────────────────────────────────
+app.post('/api/startgg', async (req, res) => {
+  const { query, variables, apiKey } = req.body;
+  if (!apiKey || !query) {
+    return res.status(400).json({ error: 'Missing apiKey or query' });
+  }
+  try {
+    const fetch = (await import('node-fetch')).default;
+    const response = await fetch('https://api.start.gg/gql/alpha', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({ query, variables }),
+    });
+    const data = await response.json();
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── START ──────────────────────────────────────────────
+const PORT = process.env.PORT || 3000;
+
+// Initialize state from saved data
+loadState();
+
+// Auto-save every 30 seconds (non-concurrent)
+let saveInterval;
+let isSaving = false;
+
+async function scheduleAutoSave() {
+  if (isSaving) return;
+  isSaving = true;
+  try {
+    await saveState();
+  } finally {
+    isSaving = false;
+  }
+}
+
+saveInterval = setInterval(scheduleAutoSave, 30000);
+
+// Cleanup on process exit
+process.on('SIGINT', () => {
+  console.log('\n🛑 Arrêt du serveur...');
+  clearInterval(saveInterval);
+  scheduleAutoSave().then(() => {
+    process.exit(0);
+  });
+});
+
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`\n  ╔══════════════════════════════════════╗`);
+  console.log(`  ║       DOJO SHOW 2.0 - Serveur        ║`);
+  console.log(`  ╠══════════════════════════════════════╣`);
+  console.log(`  ║  Local:   http://localhost:${PORT}       ║`);
+  console.log(`  ║  Réseau:  http://<IP>:${PORT}          ║`);
+  console.log(`  ╚══════════════════════════════════════╝\n`);
+});

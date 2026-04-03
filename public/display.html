@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1920">
+  <title>DOJO SHOW 2.0 — Affichage</title>
+  <link rel="stylesheet" href="/css/display.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&family=Share+Tech+Mono&family=Roboto:wght@400;500;700&family=Poppins:wght@400;500;600;700&family=Montserrat:wght@400;500;600;700&family=Orbitron:wght@400;500;700&family=Press+Start+2P&family=Raleway:wght@400;500;600;700&family=Oswald:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="displayRoot">
+    <!-- Matches View -->
+    <div id="viewMatches" class="display-view active">
+      <div id="matchGrid" class="match-grid"></div>
+    </div>
+
+    <!-- Waiting / SNCF Board View -->
+    <div id="viewWaiting" class="display-view">
+      <div class="sncf-header">
+        <div class="sncf-logo">⚔ DOJO<span class="sncf-accent">SHOW</span></div>
+        <div class="sncf-title">MATCHS EN ATTENTE</div>
+        <div class="sncf-clock" id="sncfClock">00:00</div>
+      </div>
+      <table class="sncf-table">
+        <thead>
+          <tr>
+            <th class="sncf-col-num">#</th>
+            <th class="sncf-col-game">JEU</th>
+            <th class="sncf-col-player">JOUEUR 1</th>
+            <th class="sncf-col-vs">VS</th>
+            <th class="sncf-col-player">JOUEUR 2</th>
+            <th class="sncf-col-station">POSTE</th>
+            <th class="sncf-col-status">STATUT</th>
+          </tr>
+        </thead>
+        <tbody id="sncfBody"></tbody>
+      </table>
+    </div>
+
+    <!-- Bracket View -->
+    <div id="viewBracket" class="display-view">
+      <div class="bracket-header">
+        <span class="bracket-title" id="bracketTitle">BRACKET</span>
+      </div>
+      <div class="bracket-container" id="bracketContainer"></div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/accent-color.js"></script>
+  <script src="/js/display.js"></script>
+</body>
+</html>
