@@ -455,20 +455,45 @@ function setFontFamily(font) {
 
 // ─── AUTO ROTATION ────────────────────────────────────────
 function loadAutoRotation() {
-  const seconds = (state.settings && state.settings.autoRotation) || 0;
-  const input = document.getElementById('autoRotationInput');
-  const hint = document.getElementById('rotationHint');
-  if (input) input.value = seconds;
-  if (hint) hint.textContent = seconds > 0 ? `Toutes les ${seconds}s` : 'Désactivé';
+  const ar = (state.settings && state.settings.autoRotation) || { matches: 0, waiting: 0, bracket: 0 };
+  // Migrate old single-value format
+  const vals = typeof ar === 'number' ? { matches: ar, waiting: ar, bracket: ar } : ar;
+  const modes = ['matches', 'waiting', 'bracket'];
+  modes.forEach(m => {
+    const slider = document.getElementById(`rotation-${m}`);
+    const label = document.getElementById(`rotation-${m}-val`);
+    if (slider) slider.value = vals[m] || 0;
+    if (label) label.textContent = (vals[m] || 0) > 0 ? `${vals[m]}s` : 'Off';
+  });
+  updateRotationSummary(vals);
 }
 
-function setAutoRotation(value) {
+function setAutoRotationView(mode, value) {
   const seconds = parseInt(value) || 0;
-  const input = document.getElementById('autoRotationInput');
-  const hint = document.getElementById('rotationHint');
-  if (input) input.value = seconds;
-  if (hint) hint.textContent = seconds > 0 ? `Toutes les ${seconds}s` : 'Désactivé';
-  socket.emit('settings:autoRotation', seconds);
+  const label = document.getElementById(`rotation-${mode}-val`);
+  if (label) label.textContent = seconds > 0 ? `${seconds}s` : 'Off';
+  // Read all current values and send the full object
+  const ar = {};
+  ['matches', 'waiting', 'bracket'].forEach(m => {
+    const slider = document.getElementById(`rotation-${m}`);
+    ar[m] = m === mode ? seconds : (slider ? parseInt(slider.value) || 0 : 0);
+  });
+  updateRotationSummary(ar);
+  socket.emit('settings:autoRotation', ar);
+}
+
+function updateRotationSummary(ar) {
+  const el = document.getElementById('rotationSummary');
+  if (!el) return;
+  const active = ['matches', 'waiting', 'bracket'].filter(m => (ar[m] || 0) > 0);
+  if (active.length < 2) {
+    el.textContent = 'Désactivé — au moins 2 modes doivent avoir une durée';
+    el.className = 'rotation-summary off';
+  } else {
+    const total = active.reduce((s, m) => s + ar[m], 0);
+    el.textContent = `Cycle actif : ${active.length} modes, ${total}s total`;
+    el.className = 'rotation-summary on';
+  }
 }
 
 // ─── GAME SETTINGS ────────────────────────────────────────

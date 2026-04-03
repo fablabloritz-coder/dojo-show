@@ -90,19 +90,24 @@
 
     <div class="settings-card">
       <h2>🔄 Rotation automatique</h2>
-      <p class="help-text">Basculer automatiquement entre les modes d’affichage (Matchs, Attente, Bracket).</p>
+      <p class="help-text">Régler la durée d'affichage de chaque vue. Au moins 2 vues doivent avoir une durée pour activer la rotation.</p>
       <div class="rotation-section">
-        <div class="rotation-row">
-          <label>Intervalle (secondes)</label>
-          <input type="number" id="autoRotationInput" class="rotation-input" min="0" max="300" step="5" value="0" onchange="setAutoRotation(this.value)">
-          <span class="rotation-hint" id="rotationHint">Désactivé</span>
+        <div class="rotation-view-row">
+          <label>🎮 Matchs en cours</label>
+          <input type="range" id="rotation-matches" min="0" max="120" step="5" value="0" oninput="setAutoRotationView('matches', this.value)">
+          <span class="rotation-view-val" id="rotation-matches-val">Off</span>
         </div>
-        <div class="rotation-presets">
-          <button class="btn btn-secondary btn-sm" onclick="setAutoRotation(0)">Off</button>
-          <button class="btn btn-secondary btn-sm" onclick="setAutoRotation(10)">10s</button>
-          <button class="btn btn-secondary btn-sm" onclick="setAutoRotation(30)">30s</button>
-          <button class="btn btn-secondary btn-sm" onclick="setAutoRotation(60)">60s</button>
+        <div class="rotation-view-row">
+          <label>🕐 File d'attente</label>
+          <input type="range" id="rotation-waiting" min="0" max="120" step="5" value="0" oninput="setAutoRotationView('waiting', this.value)">
+          <span class="rotation-view-val" id="rotation-waiting-val">Off</span>
         </div>
+        <div class="rotation-view-row">
+          <label>🏆 Bracket</label>
+          <input type="range" id="rotation-bracket" min="0" max="120" step="5" value="0" oninput="setAutoRotationView('bracket', this.value)">
+          <span class="rotation-view-val" id="rotation-bracket-val">Off</span>
+        </div>
+        <div class="rotation-summary off" id="rotationSummary">Désactivé</div>
       </div>
     </div>
   </section>

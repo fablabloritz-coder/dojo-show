@@ -61,6 +61,10 @@ body {
   align-content: stretch;
 }
 
+/* Adaptive gap — tighter for denser grids */
+.match-grid.density-medium { gap: 12px; }
+.match-grid.density-high { gap: 8px; }
+
 .display-match-card {
   background: var(--card-bg);
   border: 1px solid var(--card-border);
@@ -552,7 +556,6 @@ body {
 /* ─── GRID DENSITY SCALING ───────────────── */
 .match-grid.density-high {
   padding: 12px;
-  gap: 10px;
 }
 .match-grid.density-high .display-match-card {
   padding: 10px;
@@ -560,7 +563,6 @@ body {
 }
 .match-grid.density-medium {
   padding: 16px;
-  gap: 12px;
 }
 .match-grid.density-medium .display-match-card {
   padding: 14px;
@@ -614,3 +616,52 @@ body {
   position: relative;
   z-index: 1;
 }
+
+/* ─── MODE INDICATOR (rotation) ──────────── */
+.mode-indicator {
+  position: fixed;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 16px;
+  background: rgba(10,10,20,0.75);
+  backdrop-filter: blur(8px);
+  padding: 6px 18px;
+  border-radius: 20px;
+  z-index: 100;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.mode-indicator-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-width: 70px;
+}
+.mode-indicator-label {
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  color: rgba(255,255,255,0.3);
+  text-transform: uppercase;
+}
+.mode-indicator-item.active .mode-indicator-label {
+  color: rgba(255,255,255,0.8);
+}
+.mode-indicator-progress {
+  width: 100%;
+  height: 3px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.mode-indicator-fill {
+  height: 100%;
+  background: var(--purple-primary, #7b2ff7);
+  border-radius: 2px;
+  transition: width 0.05s linear;
+}
+
+/* ─── BRACKET BYE DISPLAY ────────────────── */
+.bmc-name.bye { color: #555; font-style: italic; }
+.bmc-score.hidden { visibility: hidden; }

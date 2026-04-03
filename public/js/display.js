@@ -15,6 +15,8 @@ let lastSyncTime = Date.now();
 let previousWaitingIds = [];
 let autoRotationTimer = null;
 let localDisplayMode = null;
+let rotationStartTime = 0;
+let rotationProgressTimer = null;
 const DISPLAY_MODES = ['matches', 'waiting', 'bracket'];
 
 let DEFAULT_AVATAR = 'data:image/svg+xml;base64,' + btoa('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80"><rect width="80" height="80" rx="40" fill="#7b2ff7"/><text x="40" y="52" text-anchor="middle" fill="white" font-size="32" font-family="sans-serif">?</text></svg>');
@@ -279,17 +281,19 @@ function renderBracket() {
         const w = m.winner;
         const isBye1 = m.player1 === 'BYE' || !m.player1;
         const isBye2 = m.player2 === 'BYE' || !m.player2;
+        const isTBD = m.player1 === '?' || m.player2 === '?';
+        const hideScores = isBye1 || isBye2 || isTBD;
         return `
         <div class="bracket-match-card">
           <div class="bmc-player">
-            ${!isBye1 ? avatarImg(m.player1, avSize) : ''}
-            <span class="bmc-name ${w === 1 ? 'winner' : ''} ${m.player1 === 'BYE' ? 'bye' : ''}" style="font-size:${nameSize}px">${esc(m.player1 || '?')}</span>
-            <span class="bmc-score" style="font-size:${scoreSize}px">${m.score1 || 0}</span>
+            ${!isBye1 && m.player1 !== '?' ? avatarImg(m.player1, avSize) : ''}
+            <span class="bmc-name ${w === 1 ? 'winner' : ''} ${isBye1 ? 'bye' : ''}" style="font-size:${nameSize}px">${esc(m.player1 || '?')}</span>
+            <span class="bmc-score${hideScores ? ' hidden' : ''}" style="font-size:${scoreSize}px">${m.score1 || 0}</span>
           </div>
           <div class="bmc-player">
-            ${!isBye2 ? avatarImg(m.player2, avSize) : ''}
-            <span class="bmc-name ${w === 2 ? 'winner' : ''} ${m.player2 === 'BYE' ? 'bye' : ''}" style="font-size:${nameSize}px">${esc(m.player2 || '?')}</span>
-            <span class="bmc-score" style="font-size:${scoreSize}px">${m.score2 || 0}</span>
+            ${!isBye2 && m.player2 !== '?' ? avatarImg(m.player2, avSize) : ''}
+            <span class="bmc-name ${w === 2 ? 'winner' : ''} ${isBye2 ? 'bye' : ''}" style="font-size:${nameSize}px">${esc(m.player2 || '?')}</span>
+            <span class="bmc-score${hideScores ? ' hidden' : ''}" style="font-size:${scoreSize}px">${m.score2 || 0}</span>
           </div>
         </div>`;
       }).join('')}
@@ -374,14 +378,101 @@ function getGameImage(gameName) {
 }
 
 // ─── AUTO ROTATION ───────────────────────────────────────
+function getRotationDuration(mode) {
+  const ar = state.settings.autoRotation;
+  if (!ar || typeof ar !== 'object') return 0;
+  return ar[mode] || 0;
+}
+
+function getNextMode(current) {
+  const idx = DISPLAY_MODES.indexOf(current);
+  // Find next mode that has a duration > 0
+  for (let i = 1; i <= DISPLAY_MODES.length; i++) {
+    const candidate = DISPLAY_MODES[(idx + i) % DISPLAY_MODES.length];
+    if (getRotationDuration(candidate) > 0) return candidate;
+  }
+  return null;
+}
+
+function isRotationActive() {
+  const ar = state.settings.autoRotation;
+  if (!ar || typeof ar !== 'object') return false;
+  const activeModes = DISPLAY_MODES.filter(m => (ar[m] || 0) > 0);
+  return activeModes.length >= 2; // Need at least 2 modes with duration to rotate
+}
+
 function setupAutoRotation() {
-  if (autoRotationTimer) { clearInterval(autoRotationTimer); autoRotationTimer = null; }
-  const seconds = state.settings.autoRotation || 0;
-  if (seconds <= 0) { localDisplayMode = null; return; }
-  autoRotationTimer = setInterval(() => {
-    const current = localDisplayMode || state.settings.displayMode;
-    const idx = DISPLAY_MODES.indexOf(current);
-    localDisplayMode = DISPLAY_MODES[(idx + 1) % DISPLAY_MODES.length];
-    render();
-  }, seconds * 1000);
+  if (autoRotationTimer) { clearTimeout(autoRotationTimer); autoRotationTimer = null; }
+  if (rotationProgressTimer) { clearInterval(rotationProgressTimer); rotationProgressTimer = null; }
+
+  if (!isRotationActive()) {
+    localDisplayMode = null;
+    updateModeIndicator();
+    return;
+  }
+
+  // If no local mode yet, pick the first mode with a duration
+  if (!localDisplayMode) {
+    localDisplayMode = DISPLAY_MODES.find(m => getRotationDuration(m) > 0) || state.settings.displayMode;
+  }
+
+  scheduleNextRotation();
+}
+
+function scheduleNextRotation() {
+  if (autoRotationTimer) clearTimeout(autoRotationTimer);
+  if (rotationProgressTimer) clearInterval(rotationProgressTimer);
+
+  const current = localDisplayMode || state.settings.displayMode;
+  const duration = getRotationDuration(current) * 1000;
+  if (duration <= 0) { setupAutoRotation(); return; }
+
+  rotationStartTime = Date.now();
+  updateModeIndicator();
+
+  // Progress bar update every 50ms
+  rotationProgressTimer = setInterval(() => updateModeIndicator(), 50);
+
+  autoRotationTimer = setTimeout(() => {
+    const next = getNextMode(current);
+    if (next) {
+      localDisplayMode = next;
+      render();
+      scheduleNextRotation();
+    }
+  }, duration);
+}
+
+// ─── MODE INDICATOR ──────────────────────────────────────
+const MODE_LABELS = { matches: 'MATCHS', waiting: 'ATTENTE', bracket: 'BRACKET' };
+
+function updateModeIndicator() {
+  let bar = document.getElementById('modeIndicator');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'modeIndicator';
+    bar.className = 'mode-indicator';
+    document.getElementById('displayRoot').appendChild(bar);
+  }
+
+  if (!isRotationActive()) {
+    bar.style.display = 'none';
+    return;
+  }
+
+  bar.style.display = 'flex';
+  const current = localDisplayMode || state.settings.displayMode;
+  const duration = getRotationDuration(current) * 1000;
+  const elapsed = Date.now() - rotationStartTime;
+  const pct = duration > 0 ? Math.min(1, elapsed / duration) : 0;
+
+  bar.innerHTML = DISPLAY_MODES.map(m => {
+    const dur = getRotationDuration(m);
+    if (dur <= 0) return '';
+    const isActive = m === current;
+    return `<div class="mode-indicator-item ${isActive ? 'active' : ''}">
+      <span class="mode-indicator-label">${MODE_LABELS[m]}</span>
+      ${isActive ? `<div class="mode-indicator-progress"><div class="mode-indicator-fill" style="width:${(pct * 100).toFixed(1)}%"></div></div>` : ''}
+    </div>`;
+  }).join('');
 }

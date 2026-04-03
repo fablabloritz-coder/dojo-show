@@ -46,7 +46,7 @@ let state = {
     avatarSize: 32,
     accentColor: '#7b2ff7',
     fontFamily: 'Inter',
-    autoRotation: 0,
+    autoRotation: { matches: 0, waiting: 0, bracket: 0 },
     highlightMatchId: null,
     fontProfiles: {
       '1x1': defaultFontProfile(2.0),
@@ -140,7 +140,12 @@ function loadState() {
     // Ensure new settings fields have defaults
     if (!state.settings.accentColor) state.settings.accentColor = '#7b2ff7';
     if (!state.settings.fontFamily) state.settings.fontFamily = 'Inter';
-    if (state.settings.autoRotation === undefined) state.settings.autoRotation = 0;
+    if (state.settings.autoRotation === undefined) state.settings.autoRotation = { matches: 0, waiting: 0, bracket: 0 };
+    // Migrate old single-value autoRotation to per-view object
+    if (typeof state.settings.autoRotation === 'number') {
+      const v = state.settings.autoRotation;
+      state.settings.autoRotation = { matches: v, waiting: v, bracket: v };
+    }
     if (state.settings.highlightMatchId === undefined) state.settings.highlightMatchId = null;
     state.bracket = data.bracket || state.bracket;
     state.startgg = data.startgg || state.startgg;
@@ -248,6 +253,22 @@ function updateBracketFromMatch(match) {
   return true;
 }
 
+// ─── AVATAR HELPERS ─────────────────────────────────────
+async function urlToBase64(url, maxBytes = 500000) {
+  try {
+    const fetch = (await import('node-fetch')).default;
+    const resp = await fetch(url, { timeout: 5000 });
+    if (!resp.ok) return null;
+    const contentType = resp.headers.get('content-type') || 'image/png';
+    if (!contentType.startsWith('image/')) return null;
+    const buffer = await resp.buffer();
+    if (buffer.length > maxBytes) return null;
+    return `data:${contentType};base64,${buffer.toString('base64')}`;
+  } catch {
+    return null;
+  }
+}
+
 // ─── SOCKET.IO ──────────────────────────────────────────
 io.on('connection', (socket) => {
   console.log(`Client connected: ${socket.id}`);
@@ -260,12 +281,19 @@ io.on('connection', (socket) => {
 
   // --- Match CRUD ---
   socket.on('match:create', (data) => {
+    // Input validation
+    const sanitize = (s, max = 50) => (typeof s === 'string' ? s : '').trim().substring(0, max);
+    const game = sanitize(data.game, 80) || 'Autre';
+    const p1 = sanitize(data.player1, 50) || 'Joueur 1';
+    const p2 = sanitize(data.player2, 50) || 'Joueur 2';
+    const station = sanitize(data.station, 30);
+    const round = sanitize(data.round, 40);
     const initialStatus = data.status || 'waiting';
     const match = {
       id: genId(),
-      game: data.game || 'Autre',
-      player1: { name: data.player1 || 'Joueur 1', present: false },
-      player2: { name: data.player2 || 'Joueur 2', present: false },
+      game,
+      player1: { name: p1, present: false },
+      player2: { name: p2, present: false },
       score1: 0,
       score2: 0,
       status: initialStatus,
@@ -275,8 +303,8 @@ io.on('connection', (socket) => {
       timerStartedAt: initialStatus === 'active' ? Date.now() : 0,
       timerAccumulated: 0,
       timerDuration: Math.max(10, Math.min(600, parseInt(data.timerDuration) || 120)),
-      station: data.station || '',
-      round: data.round || '',
+      station,
+      round,
       streaming: !!data.streaming,
       order: state.matches.filter(m => m.status === initialStatus).length,
       createdAt: Date.now(),
@@ -305,6 +333,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('match:delete', (data) => {
+    if (state.settings.highlightMatchId === data.id) state.settings.highlightMatchId = null;
     state.matches = state.matches.filter(m => m.id !== data.id);
     broadcast();
   });
@@ -554,11 +583,17 @@ io.on('connection', (socket) => {
   });
 
   socket.on('settings:autoRotation', (data) => {
-    const seconds = parseInt(data);
-    if (!isNaN(seconds) && seconds >= 0 && seconds <= 300) {
-      state.settings.autoRotation = seconds;
-      broadcast();
+    if (typeof data !== 'object' || !data) return;
+    const modes = ['matches', 'waiting', 'bracket'];
+    for (const mode of modes) {
+      if (data[mode] !== undefined) {
+        const seconds = parseInt(data[mode]);
+        if (!isNaN(seconds) && seconds >= 0 && seconds <= 300) {
+          state.settings.autoRotation[mode] = seconds;
+        }
+      }
     }
+    broadcast();
   });
 
   socket.on('games:updateSettings', (data) => {
@@ -569,7 +604,7 @@ io.on('connection', (socket) => {
       gs.color = /^#[0-9a-fA-F]{6}$/.test(data.color) ? data.color : '';
     }
     if (data.image !== undefined) {
-      gs.image = (data.image && data.image.length < 2000000 && /^data:image\//.test(data.image)) ? data.image : '';
+      gs.image = (data.image && data.image.length < 2000000 && /^data:image\/(png|jpe?g|gif|webp);/.test(data.image)) ? data.image : '';
     }
     if (data.imageOpacity !== undefined) {
       gs.imageOpacity = Math.max(0, Math.min(1, parseFloat(data.imageOpacity) || 0.3));
@@ -666,13 +701,26 @@ io.on('connection', (socket) => {
     broadcast();
   });
 
-  socket.on('startgg:setData', (data) => {
+  socket.on('startgg:setData', async (data) => {
     if (data.games) state.games = data.games;
     if (data.players) {
-      state.players = data.players.map(p => {
-        if (typeof p === 'string') return { id: genId(), name: p, avatar: DEFAULT_AVATAR };
-        return { id: p.id || genId(), name: p.name, avatar: p.avatar || DEFAULT_AVATAR };
-      });
+      const players = [];
+      for (const p of data.players) {
+        if (typeof p === 'string') {
+          players.push({ id: genId(), name: p, avatar: DEFAULT_AVATAR });
+        } else {
+          let avatar = DEFAULT_AVATAR;
+          // Convert URL avatars to base64
+          if (p.avatar && p.avatar.startsWith('http')) {
+            const b64 = await urlToBase64(p.avatar);
+            avatar = b64 || DEFAULT_AVATAR;
+          } else if (p.avatar && p.avatar.startsWith('data:image/')) {
+            avatar = p.avatar;
+          }
+          players.push({ id: p.id || genId(), name: p.name, avatar });
+        }
+      }
+      state.players = players;
     }
     broadcast();
   });
@@ -771,6 +819,12 @@ io.on('connection', (socket) => {
       }
       
       const backupPath = path.join(DATA_DIR, sanitizedFilename);
+      // Path traversal protection
+      const resolved = path.resolve(backupPath);
+      if (!resolved.startsWith(path.resolve(DATA_DIR))) {
+        socket.emit('restore:error', { message: 'Chemin invalide' });
+        return;
+      }
       const backupData = JSON.parse(await fs.readFile(backupPath, 'utf8'));
       
       // Restore state but reset runtime properties
@@ -1008,6 +1062,11 @@ app.post('/api/startgg', async (req, res) => {
   const { query, variables, apiKey } = req.body;
   if (!apiKey || !query) {
     return res.status(400).json({ error: 'Missing apiKey or query' });
+  }
+  // Block mutations — only allow read queries
+  const normalized = query.replace(/\s+/g, ' ').trim().toLowerCase();
+  if (normalized.startsWith('mutation')) {
+    return res.status(403).json({ error: 'Mutations not allowed' });
   }
   try {
     const fetch = (await import('node-fetch')).default;

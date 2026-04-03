@@ -586,30 +586,39 @@ body {
 }
 
 /* Auto-rotation */
-.rotation-row {
+.rotation-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.rotation-view-row {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 12px;
 }
-.rotation-input {
-  width: 80px;
-  padding: 8px;
-  background: #1a1a2e;
-  color: #f0f0f5;
-  border: 1px solid var(--card-border, rgba(123,47,247,0.25));
-  border-radius: 6px;
+.rotation-view-row label {
+  min-width: 160px;
   font-size: 14px;
+}
+.rotation-view-row input[type="range"] {
+  flex: 1;
+  accent-color: var(--purple-primary, #7b2ff7);
+}
+.rotation-view-val {
+  min-width: 40px;
+  text-align: right;
+  font-size: 13px;
+  color: #aaa;
+  font-variant-numeric: tabular-nums;
+}
+.rotation-summary {
+  font-size: 12px;
+  padding: 8px 12px;
+  border-radius: 6px;
   text-align: center;
 }
-.rotation-hint {
-  color: #888;
-  font-size: 13px;
-}
-.rotation-presets {
-  display: flex;
-  gap: 8px;
-}
+.rotation-summary.off { background: rgba(255,255,255,0.04); color: #666; }
+.rotation-summary.on { background: rgba(123,47,247,0.15); color: var(--purple-light, #b388ff); }
 
 /* Game item settings */
 .game-item {
