@@ -152,6 +152,7 @@ function renderMatches() {
 function renderSingleMatchCard(m, titleSize, nameSize, scoreSize, timerSize, avSize, isAlt) {
     const elapsed = getElapsed(m);
     const phase = m.phase || 'playing';
+  const hasTopBadges = !!(m.station || m.streaming || m.bracketMatch);
 
     // Timer: countdown during calling, countup during playing
     let timeStr, timerClass;
@@ -185,7 +186,7 @@ function renderSingleMatchCard(m, titleSize, nameSize, scoreSize, timerSize, avS
                   : '';
 
     return `
-    <div class="display-match-card ${isAlt ? 'alt' : ''}${cardExtra}" data-id="${m.id}">
+    <div class="display-match-card ${isAlt ? 'alt' : ''}${cardExtra}${hasTopBadges ? ' has-top-badges' : ''}" data-id="${m.id}">
       ${overlay}
       ${(() => { const gi = getGameImage(m.game); return gi ? `<div class="dmc-game-bg" style="background-image:url('${gi.image}');opacity:${gi.imageOpacity || 0.3}"></div>` : ''; })()}
       ${m.station ? `<div class="dmc-station">${esc(m.station)}</div>` : ''}

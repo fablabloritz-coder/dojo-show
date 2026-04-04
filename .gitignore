@@ -17,6 +17,7 @@ data/
 
 # Temp launcher script
 _start_server.cmd
+_browser_pref.txt
 _node_dl.zip
 _node_tmp/
 

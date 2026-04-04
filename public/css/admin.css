@@ -822,7 +822,7 @@ body {
   right: 0;
   max-height: 220px;
   overflow-y: auto;
-  background: var(--bg-card);
+  background: var(--bg-elevated);
   border: 1px solid var(--purple-primary);
   border-top: none;
   border-radius: 0 0 var(--radius) var(--radius);

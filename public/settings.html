@@ -178,6 +178,75 @@
       <div id="startggStatus" class="status-message"></div>
       <div id="startggResults" class="results-container"></div>
     </div>
+
+    <!-- ═══ IMPORT PAR ÉTAPES ═══ -->
+    <div class="settings-card" id="importPanel">
+      <h2>📥 Import depuis Start.gg</h2>
+      <p class="help-text">Importez en 3 étapes : jeux, joueurs, puis avatars. Chaque étape peut être lancée indépendamment.</p>
+
+      <!-- ÉTAPE 1: Jeux -->
+      <div class="import-step">
+        <div class="import-step-header">
+          <span class="import-step-number">1</span>
+          <div class="import-step-info">
+            <strong>Importer les jeux</strong>
+            <span class="import-step-desc">Récupère la liste des jeux du tournoi avec leurs images</span>
+          </div>
+          <button class="btn btn-primary btn-sm" id="btnImportGames" onclick="importStep1_Games()">Importer les jeux</button>
+        </div>
+        <div class="import-step-status" id="step1Status"></div>
+      </div>
+
+      <!-- ÉTAPE 2: Joueurs -->
+      <div class="import-step">
+        <div class="import-step-header">
+          <span class="import-step-number">2</span>
+          <div class="import-step-info">
+            <strong>Importer les joueurs</strong>
+            <span class="import-step-desc">Récupère les pseudos des inscrits, jeu par jeu</span>
+          </div>
+          <div class="import-step-controls">
+            <select id="importPlayersGame" class="import-game-select">
+              <option value="__all__">🎮 Tous les jeux</option>
+            </select>
+            <button class="btn btn-primary btn-sm" id="btnImportPlayers" onclick="importStep2_Players()">Importer les joueurs</button>
+          </div>
+        </div>
+        <div class="import-progress-wrap" id="step2ProgressWrap" style="display:none">
+          <div class="import-progress-bar"><div class="import-progress-fill" id="step2ProgressFill"></div></div>
+          <span class="import-progress-label" id="step2ProgressLabel">0%</span>
+        </div>
+        <div class="import-step-status" id="step2Status"></div>
+      </div>
+
+      <!-- ÉTAPE 3: Avatars -->
+      <div class="import-step">
+        <div class="import-step-header">
+          <span class="import-step-number">3</span>
+          <div class="import-step-info">
+            <strong>Importer les avatars</strong>
+            <span class="import-step-desc">Télécharge les photos de profil (peut être long)</span>
+          </div>
+          <div class="import-step-controls">
+            <select id="importAvatarsGame" class="import-game-select">
+              <option value="__all__">🎮 Tous les jeux</option>
+            </select>
+            <button class="btn btn-primary btn-sm" id="btnImportAvatars" onclick="importStep3_Avatars()">Importer les avatars</button>
+          </div>
+        </div>
+        <div class="import-progress-wrap" id="step3ProgressWrap" style="display:none">
+          <div class="import-progress-bar"><div class="import-progress-fill" id="step3ProgressFill"></div></div>
+          <span class="import-progress-label" id="step3ProgressLabel">0%</span>
+        </div>
+        <div class="import-step-status" id="step3Status"></div>
+      </div>
+
+      <!-- Journal d'import -->
+      <div class="import-log-wrap">
+        <h4>📋 Journal d'import</h4>
+        <div class="import-log" id="importLog"></div>
+      </div>
+    </div>
   </section>
 
   <!-- TAB: Games -->
@@ -197,7 +266,7 @@
         </div>
         <button class="btn btn-primary" onclick="addGame()">＋ Ajouter</button>
       </div>
-      <button class="btn btn-secondary" onclick="importGamesFromStartGG()">🔗 Importer depuis Start.gg</button>
+      <button class="btn btn-secondary" onclick="switchTab('startgg')">🔗 Importer depuis Start.gg</button>
 
       <div class="list-container" id="gamesList">
         <div class="empty-state-sm">Aucun jeu enregistré</div>
@@ -223,7 +292,7 @@
         </div>
         <button class="btn btn-primary" onclick="addPlayer()">＋ Ajouter</button>
       </div>
-      <button class="btn btn-secondary" onclick="importPlayersFromStartGG()">🔗 Importer depuis Start.gg</button>
+      <button class="btn btn-secondary" onclick="switchTab('startgg')">🔗 Importer depuis Start.gg</button>
 
       <div class="form-group" id="playerFilterGroup" style="display:none; margin-top: 12px;">
         <label>Filtrer par jeu</label>

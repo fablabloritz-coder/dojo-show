@@ -154,6 +154,32 @@ for /f "usebackq tokens=*" %%i in (`powershell -NoProfile -Command "try { $ip = 
 :: ==========================================
 ::  ETAPE 4 : Menu de lancement
 :: ==========================================
+
+:: Charger le choix de navigateur sauvegarde
+set "CHOIX="
+set "PREF_FILE=!BD!_browser_pref.txt"
+if exist "!PREF_FILE!" (
+  set /p CHOIX=<"!PREF_FILE!"
+)
+
+if defined CHOIX (
+  cls
+  echo.
+  echo  ==========================================
+  echo    DOJO SHOW 2.0 - Lanceur
+  echo  ==========================================
+  echo.
+  echo    Adresses du serveur :
+  echo    - Sur CE PC :  http://localhost:3000
+  echo    - Sur le LAN : http://!LAN_IP!:3000
+  echo.
+  echo    Navigateur memorise : choix !CHOIX!
+  echo    Pour changer, supprimez _browser_pref.txt
+  echo  ==========================================
+  echo.
+  goto START_SERVER
+)
+
 cls
 echo.
 echo  ==========================================
@@ -178,6 +204,11 @@ echo    5. Serveur uniquement [pas de navigateur]
 echo  ==========================================
 echo.
 set /p CHOIX="  Choix [1-5] : "
+
+:: Sauvegarder le choix
+echo !CHOIX!>"!PREF_FILE!"
+
+:START_SERVER
 
 :: ==========================================
 ::  ETAPE 5 : Demarrer le serveur
@@ -213,13 +244,21 @@ start "DOJO-SERVER" "!SRV!"
 :: Attendre que le serveur reponde vraiment (max 15 secondes)
 echo  [*] Attente du demarrage du serveur...
 set "SERVER_OK=0"
-for /L %%i in (1,1,15) do (
-  if "!SERVER_OK!"=="0" (
-    powershell -NoProfile -Command "try { Invoke-WebRequest -Uri 'http://localhost:3000' -UseBasicParsing -TimeoutSec 1 -ErrorAction Stop; exit 0 } catch { exit 1 }" >nul 2>&1
-    if not errorlevel 1 set "SERVER_OK=1"
-    if "!SERVER_OK!"=="0" timeout /t 1 /nobreak >nul
-  )
+set "TRIES=0"
+
+:HEALTH_LOOP
+if "!TRIES!"=="15" goto HEALTH_DONE
+set /a TRIES+=1
+curl.exe -s -o nul -w "" --max-time 1 http://localhost:3000 >nul 2>&1
+if not errorlevel 1 (
+  set "SERVER_OK=1"
+  goto HEALTH_DONE
 )
+echo  [*] Tentative !TRIES!/15...
+timeout /t 1 /nobreak >nul
+goto HEALTH_LOOP
+
+:HEALTH_DONE
 
 if "!SERVER_OK!"=="0" goto SERVER_FAILED
 goto SERVER_OK

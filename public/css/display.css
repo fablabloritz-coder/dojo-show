@@ -97,6 +97,11 @@ body {
   background: linear-gradient(90deg, var(--purple-light), #c77dff);
 }
 
+/* Reserve top area when station/twitch/tournament badges are shown */
+.display-match-card.has-top-badges .dmc-game {
+  margin-top: 18px;
+}
+
 .dmc-game {
   font-weight: 700;
   color: var(--purple-light);

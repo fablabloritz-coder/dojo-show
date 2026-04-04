@@ -949,15 +949,17 @@ io.on('connection', (socket) => {
     broadcast();
   });
 
-  socket.on('players:update', async (data) => {
+  socket.on('players:update', async (data, callback) => {
     const player = state.players.find(p => p.id === data.id);
-    if (!player) return;
+    if (!player) { if (typeof callback === 'function') callback({ ok: false }); return; }
     if (data.name) player.name = data.name.trim();
     if (data.avatar !== undefined) {
       player.avatar = await resolveAvatarInput(data.avatar, `player-${data.id || 'u'}`);
       scheduleAvatarPrune();
     }
+    if (data.games && Array.isArray(data.games)) player.games = data.games;
     broadcast();
+    if (typeof callback === 'function') callback({ ok: true });
   });
 
   socket.on('players:delete', (data) => {

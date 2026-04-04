@@ -578,16 +578,18 @@ function setupAutocomplete(inputId, listId, optionsFn, onSelect) {
 function getPlayersForSelectedGame() {
   const game = document.getElementById('inputGame')?.value?.trim();
   if (!game) return state.players;
-  return state.players.filter(p => !p.games || p.games.length === 0 || p.games.includes(game));
+  return state.players.filter(p => Array.isArray(p.games) && p.games.includes(game));
 }
 
 function initAutocompletes() {
   setupAutocomplete('inputGame', 'acGameList', () =>
     state.games.map(g => ({ label: g }))
   , () => {
-    // Refresh player lists when game changes
-    document.getElementById('inputPlayer1')?.dispatchEvent(new Event('input'));
-    document.getElementById('inputPlayer2')?.dispatchEvent(new Event('input'));
+    // Force close and re-render player lists when game changes
+    const p1 = document.getElementById('acPlayer1List');
+    const p2 = document.getElementById('acPlayer2List');
+    if (p1) p1.classList.remove('visible');
+    if (p2) p2.classList.remove('visible');
   });
 
   setupAutocomplete('inputPlayer1', 'acPlayer1List', () =>
@@ -607,10 +609,12 @@ function initAutocompletes() {
   );
 }
 
-// Also refresh autocomplete when game input changes
-document.getElementById('inputGame')?.addEventListener('input', () => {
-  document.getElementById('inputPlayer1')?.dispatchEvent(new Event('focus'));
-  document.getElementById('inputPlayer2')?.dispatchEvent(new Event('focus'));
+// Refresh player autocomplete whenever game input changes
+document.getElementById('inputGame')?.addEventListener('change', () => {
+  const p1List = document.getElementById('acPlayer1List');
+  const p2List = document.getElementById('acPlayer2List');
+  if (p1List) { p1List.innerHTML = ''; p1List.classList.remove('visible'); }
+  if (p2List) { p2List.innerHTML = ''; p2List.classList.remove('visible'); }
 });
 
 function updateGamesDatalist() {

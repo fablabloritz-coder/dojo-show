@@ -762,3 +762,116 @@ body {
   border-radius: 4px;
   border: 1px solid rgba(255,255,255,0.1);
 }
+
+/* ─── IMPORT PANEL ──────────────────────────── */
+.import-step {
+  padding: 16px;
+  margin-bottom: 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+}
+.import-step-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.import-step-number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--purple-primary);
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.import-step-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.import-step-info strong {
+  font-size: 14px;
+}
+.import-step-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.import-step-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.import-game-select {
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-color);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 12px;
+  min-width: 160px;
+}
+.import-game-select:focus {
+  outline: none;
+  border-color: var(--purple-primary);
+}
+.import-progress-wrap {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.import-progress-bar {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+.import-progress-fill {
+  height: 100%;
+  width: 0;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--purple-primary), var(--purple-light));
+  transition: width 0.3s ease;
+}
+.import-progress-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  min-width: 100px;
+  text-align: right;
+}
+.import-step-status {
+  margin-top: 8px;
+  font-size: 12px;
+  min-height: 18px;
+}
+.import-step-status.status-loading { color: var(--warning); }
+.import-step-status.status-success { color: var(--success); }
+.import-step-status.status-error { color: var(--danger); }
+.import-log-wrap {
+  margin-top: 16px;
+}
+.import-log-wrap h4 {
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.import-log {
+  background: #08080f;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: 12px;
+  max-height: 200px;
+  overflow-y: auto;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.import-log::-webkit-scrollbar { width: 6px; }
+.import-log::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }

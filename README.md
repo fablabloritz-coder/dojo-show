@@ -34,7 +34,7 @@ Orchestrateur de tournoi temps réel pour événements gaming — matchs, bracke
 - Interface complète de gestion des matchs, joueurs et jeux
 - Édition des scores live avec raccourcis (+1 / -1)
 - Regroupement des matchs par jeu (accordéon)
-- Import Start.gg (joueurs et jeux)
+- Import Start.gg robuste (jeux, joueurs, avatars)
 - Données de test intégrées pour les démos
 
 ### Paramètres
@@ -44,6 +44,17 @@ Orchestrateur de tournoi temps réel pour événements gaming — matchs, bracke
 - Taille des avatars
 - Rotation automatique des vues
 - Configuration Start.gg (clé API, slug tournoi)
+
+### Start.gg (import avancé)
+- Connexion via API GraphQL Start.gg (token requis)
+- Import segmenté en **3 étapes indépendantes**:
+    - Étape 1: import des jeux (avec images)
+    - Étape 2: import paginé des joueurs par événement/jeu
+    - Étape 3: import des avatars joueurs séparé (plus lent)
+- Filtrage par jeu pour les étapes joueurs et avatars
+- Journal d'import en temps réel + barres de progression
+- Gestion des gros tournois via pagination (réduction des erreurs de complexité)
+- Les avatars distants sont téléchargés en local (`data/avatars/`) pour éviter les liens cassés
 
 ---
 
@@ -76,7 +87,11 @@ Le serveur démarre sur **http://localhost:3000**.
 
 ### Sous Windows
 
-Double-cliquer sur `start.bat` pour un lanceur interactif avec choix du navigateur (Chrome, Edge, Firefox en mode app).
+Double-cliquer sur `start.bat` pour un lanceur interactif avec:
+- choix du navigateur (Chrome, Edge, Firefox, défaut)
+- ouverture en mode app pour Chrome/Edge
+- attente active du démarrage serveur avant ouverture du navigateur
+- mémorisation du choix de navigateur pour les prochains lancements
 
 ---
 
@@ -130,6 +145,7 @@ Double-cliquer sur `start.bat` pour un lanceur interactif avec choix du navigate
 - **Personnalisation** : polices Google Fonts, couleur d'accent, images/couleurs par jeu
 - **Avatars** : support avatars joueurs dans admin et affichage
 - **Import** : intégration Start.gg pour joueurs et jeux
+- **Import Start.gg** : pipeline 3 étapes (jeux -> joueurs -> avatars), pagination et progression visuelle
 - **Persistance** : auto-save JSON avec rechargement à chaud
 
 ---
