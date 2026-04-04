@@ -225,6 +225,13 @@
       </div>
       <button class="btn btn-secondary" onclick="importPlayersFromStartGG()">🔗 Importer depuis Start.gg</button>
 
+      <div class="form-group" id="playerFilterGroup" style="display:none; margin-top: 12px;">
+        <label>Filtrer par jeu</label>
+        <select id="playerGameFilter" onchange="renderPlayers()">
+          <option value="">Tous les joueurs</option>
+        </select>
+      </div>
+
       <div class="list-container" id="playersList">
         <div class="empty-state-sm">Aucun joueur enregistré</div>
       </div>

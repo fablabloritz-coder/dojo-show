@@ -883,10 +883,10 @@ io.on('connection', (socket) => {
     if (data.players) {
       const players = await mapWithConcurrency(data.players, 4, async (p) => {
         if (typeof p === 'string') {
-          return { id: genId(), name: p, avatar: DEFAULT_AVATAR };
+          return { id: genId(), name: p, avatar: DEFAULT_AVATAR, games: [] };
         }
         const avatar = await resolveAvatarInput(p.avatar, 'startgg');
-        return { id: p.id || genId(), name: p.name, avatar };
+        return { id: p.id || genId(), name: p.name, avatar, games: Array.isArray(p.games) ? p.games : [] };
       });
       state.players = players;
       scheduleAvatarPrune();
@@ -895,10 +895,22 @@ io.on('connection', (socket) => {
   });
 
   // --- Games CRUD ---
-  socket.on('games:add', (data) => {
+  socket.on('games:add', async (data) => {
     const name = (data.name || '').trim();
     if (!name || state.games.includes(name)) return;
     state.games.push(name);
+    // If Start.gg provided a game image, save it
+    if (data.startggImage && typeof data.startggImage === 'string') {
+      try {
+        const localPath = await resolveAvatarInput(data.startggImage, 'game');
+        if (localPath && localPath !== DEFAULT_AVATAR) {
+          const gs = state.gameSettings[name] || {};
+          gs.image = localPath;
+          gs.imageOpacity = gs.imageOpacity || 0.3;
+          state.gameSettings[name] = gs;
+        }
+      } catch (e) { /* ignore failed image download */ }
+    }
     broadcast();
   });
 

@@ -322,6 +322,31 @@ body {
   display: flex;
   align-items: center;
 }
+.player-details {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.player-game-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.player-game-tag {
+  display: inline-block;
+  font-size: 10px;
+  padding: 1px 7px;
+  border-radius: 8px;
+  background: var(--purple-glow);
+  color: var(--purple-light);
+  border: 1px solid var(--purple-primary);
+  line-height: 1.4;
+}
+.player-count {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 4px 0 8px;
+}
 
 /* ─── RESET GRID ─────────────────────────── */
 .reset-grid {

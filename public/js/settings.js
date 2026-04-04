@@ -223,7 +223,7 @@ async function importGamesFromStartGG() {
     return;
   }
 
-  const query = `query($slug:String!){tournament(slug:$slug){events{videogame{name}}}}`;
+  const query = `query($slug:String!){tournament(slug:$slug){events{videogame{name images{url}}}}}`;
   try {
     const resp = await fetch('/api/startgg', {
       method: 'POST',
@@ -233,12 +233,18 @@ async function importGamesFromStartGG() {
     const data = await resp.json();
     if (!data.data?.tournament) throw new Error('Tournoi introuvable');
 
-    const games = [...new Set(data.data.tournament.events
-      .map(e => e.videogame?.name)
-      .filter(Boolean))];
+    const gameMap = new Map();
+    for (const event of data.data.tournament.events) {
+      const vg = event.videogame;
+      if (vg?.name && !gameMap.has(vg.name)) {
+        gameMap.set(vg.name, vg.images?.[0]?.url || null);
+      }
+    }
 
-    games.forEach(g => socket.emit('games:add', { name: g }));
-    alert(`${games.length} jeu(x) importé(s) : ${games.join(', ')}`);
+    for (const [name, imageUrl] of gameMap) {
+      socket.emit('games:add', { name, startggImage: imageUrl });
+    }
+    alert(`${gameMap.size} jeu(x) importé(s) : ${[...gameMap.keys()].join(', ')}`);
   } catch (err) {
     alert('Erreur : ' + err.message);
   }
@@ -247,22 +253,53 @@ async function importGamesFromStartGG() {
 // ─── PLAYERS ────────────────────────────────────────────
 function renderPlayers() {
   const container = document.getElementById('playersList');
-  if (state.players.length === 0) {
-    container.innerHTML = '<div class="empty-state-sm">Aucun joueur enregistré</div>';
+  const filterGroup = document.getElementById('playerFilterGroup');
+  const filterSelect = document.getElementById('playerGameFilter');
+
+  // Collect all games from players
+  const allGames = new Set();
+  state.players.forEach(p => (p.games || []).forEach(g => allGames.add(g)));
+
+  // Show/hide filter
+  if (filterGroup) {
+    filterGroup.style.display = allGames.size > 0 ? '' : 'none';
+    if (filterSelect && allGames.size > 0) {
+      const current = filterSelect.value;
+      filterSelect.innerHTML = '<option value="">Tous les joueurs</option>' +
+        [...allGames].sort().map(g => `<option value="${escAttr(g)}" ${g === current ? 'selected' : ''}>${esc(g)}</option>`).join('');
+    }
+  }
+
+  const filterGame = filterSelect?.value || '';
+  let filtered = state.players;
+  if (filterGame) {
+    filtered = state.players.filter(p => (p.games || []).includes(filterGame));
+  }
+
+  if (filtered.length === 0) {
+    container.innerHTML = `<div class="empty-state-sm">${filterGame ? 'Aucun joueur inscrit à ' + esc(filterGame) : 'Aucun joueur enregistré'}</div>`;
     return;
   }
-  container.innerHTML = state.players.map(p => `
+  const countLabel = filterGame ? `<div class="player-count">${filtered.length} joueur(s) sur ${esc(filterGame)}</div>` : `<div class="player-count">${filtered.length} joueur(s)</div>`;
+  container.innerHTML = countLabel + filtered.map(p => {
+    const gameTags = (p.games && p.games.length)
+      ? p.games.map(g => `<span class="player-game-tag">${esc(g)}</span>`).join('')
+      : '';
+    return `
     <div class="list-item">
       <div class="player-info">
         <img src="${escAttr(p.avatar || '')}" alt="" class="player-avatar" onerror="this.style.display='none'">
-        <span class="list-item-name">${esc(p.name)}</span>
+        <div class="player-details">
+          <span class="list-item-name">${esc(p.name)}</span>
+          ${gameTags ? `<div class="player-game-tags">${gameTags}</div>` : ''}
+        </div>
       </div>
       <div class="list-item-actions">
         <button class="btn btn-secondary btn-sm" onclick="editPlayer('${escAttr(p.id)}')">✏</button>
         <button class="btn btn-danger" onclick="deletePlayer('${escAttr(p.id)}')">✕</button>
       </div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 }
 
 function addPlayer() {
@@ -366,7 +403,7 @@ async function importPlayersFromStartGG() {
     return;
   }
 
-  const query = `query($slug:String!){tournament(slug:$slug){events{entrants(query:{perPage:500}){nodes{participants{gamerTag user{images(type:"profile"){url}}}}}}}}`;
+  const query = `query($slug:String!){tournament(slug:$slug){events{name videogame{name} entrants(query:{perPage:500}){nodes{participants{gamerTag user{images(type:"profile"){url}}}}}}}}`;
   try {
     const resp = await fetch('/api/startgg', {
       method: 'POST',
@@ -376,22 +413,30 @@ async function importPlayersFromStartGG() {
     const data = await resp.json();
     if (!data.data?.tournament) throw new Error('Tournoi introuvable');
 
-    const players = [];
-    const seen = new Set();
+    const playerMap = new Map();
     for (const event of (data.data.tournament.events || [])) {
+      const gameName = event.videogame?.name || event.name || 'Inconnu';
       for (const entrant of (event.entrants?.nodes || [])) {
         for (const p of (entrant.participants || [])) {
-          if (!seen.has(p.gamerTag)) {
-            seen.add(p.gamerTag);
+          const tag = p.gamerTag;
+          if (!tag) continue;
+          if (playerMap.has(tag)) {
+            playerMap.get(tag).games.push(gameName);
+          } else {
             const avatarUrl = p.user?.images?.[0]?.url || null;
-            players.push({ name: p.gamerTag, avatar: avatarUrl });
+            playerMap.set(tag, { name: tag, avatar: avatarUrl, games: [gameName] });
           }
         }
       }
     }
 
+    const players = [...playerMap.values()];
+    // Deduplicate game list per player
+    players.forEach(p => p.games = [...new Set(p.games)]);
+
     socket.emit('startgg:setData', { players });
-    alert(`${players.length} joueur(s) importé(s)`);
+    const gameCount = new Set(players.flatMap(p => p.games)).size;
+    alert(`${players.length} joueur(s) importé(s) sur ${gameCount} jeu(x)`);
   } catch (err) {
     alert('Erreur : ' + err.message);
   }
