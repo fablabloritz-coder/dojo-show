@@ -810,6 +810,60 @@ body {
   gap: 12px;
 }
 
+/* ─── AUTOCOMPLETE ───────────────────────── */
+.autocomplete-wrap {
+  position: relative;
+}
+.autocomplete-list {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--purple-primary);
+  border-top: none;
+  border-radius: 0 0 var(--radius) var(--radius);
+  z-index: 100;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+}
+.autocomplete-list.visible {
+  display: block;
+}
+.ac-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-primary);
+  transition: background 0.15s;
+}
+.ac-item:hover, .ac-item.active {
+  background: var(--purple-glow);
+}
+.ac-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.ac-label {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ac-tags {
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
 /* ─── START.GG ───────────────────────────── */
 .startgg-status {
   padding: 8px;

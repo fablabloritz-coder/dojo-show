@@ -251,20 +251,27 @@
     <div class="modal-body">
       <div class="form-group">
         <label>Jeu</label>
-        <input type="text" id="inputGame" list="gamesList" placeholder="Ex: Street Fighter 6">
-        <datalist id="gamesList"></datalist>
+        <div class="autocomplete-wrap" id="acGame">
+          <input type="text" id="inputGame" autocomplete="off" placeholder="Ex: Street Fighter 6">
+          <div class="autocomplete-list" id="acGameList"></div>
+        </div>
       </div>
       <div class="form-row">
         <div class="form-group">
           <label>Joueur 1</label>
-          <input type="text" id="inputPlayer1" list="playersList" placeholder="Nom joueur 1">
+          <div class="autocomplete-wrap" id="acPlayer1">
+            <input type="text" id="inputPlayer1" autocomplete="off" placeholder="Nom joueur 1">
+            <div class="autocomplete-list" id="acPlayer1List"></div>
+          </div>
         </div>
         <div class="form-group">
           <label>Joueur 2</label>
-          <input type="text" id="inputPlayer2" list="playersList" placeholder="Nom joueur 2">
+          <div class="autocomplete-wrap" id="acPlayer2">
+            <input type="text" id="inputPlayer2" autocomplete="off" placeholder="Nom joueur 2">
+            <div class="autocomplete-list" id="acPlayer2List"></div>
+          </div>
         </div>
       </div>
-      <datalist id="playersList"></datalist>
       <div class="form-row">
         <div class="form-group">
           <label>Station / Setup</label>

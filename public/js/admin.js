@@ -507,19 +507,118 @@ function openSettings() {
   window.open('/settings.html', 'dojoSettings');
 }
 
+// ─── AUTOCOMPLETE ───────────────────────────────────────
+function setupAutocomplete(inputId, listId, optionsFn, onSelect) {
+  const input = document.getElementById(inputId);
+  const list = document.getElementById(listId);
+  if (!input || !list) return;
+  let activeIdx = -1;
+
+  function render() {
+    const val = input.value.trim().toLowerCase();
+    const options = optionsFn();
+    const filtered = val
+      ? options.filter(o => o.label.toLowerCase().includes(val))
+      : options;
+    activeIdx = -1;
+    if (filtered.length === 0 || (filtered.length === 1 && filtered[0].label.toLowerCase() === val)) {
+      list.classList.remove('visible');
+      list.innerHTML = '';
+      return;
+    }
+    list.innerHTML = filtered.map((o, i) => {
+      const avatarHtml = o.avatar ? `<img src="${escapeAttr(o.avatar)}" class="ac-avatar" onerror="this.style.display='none'">` : '';
+      const tagsHtml = o.tags ? `<span class="ac-tags">${o.tags.map(t => esc(t)).join(', ')}</span>` : '';
+      return `<div class="ac-item" data-idx="${i}" data-value="${escapeAttr(o.label)}">${avatarHtml}<span class="ac-label">${esc(o.label)}</span>${tagsHtml}</div>`;
+    }).join('');
+    list.classList.add('visible');
+  }
+
+  input.addEventListener('input', render);
+  input.addEventListener('focus', render);
+
+  list.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    const item = e.target.closest('.ac-item');
+    if (item) {
+      input.value = item.dataset.value;
+      list.classList.remove('visible');
+      if (onSelect) onSelect(item.dataset.value);
+    }
+  });
+
+  input.addEventListener('keydown', (e) => {
+    const items = list.querySelectorAll('.ac-item');
+    if (!items.length) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      activeIdx = Math.min(activeIdx + 1, items.length - 1);
+      items.forEach((it, i) => it.classList.toggle('active', i === activeIdx));
+      items[activeIdx]?.scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      activeIdx = Math.max(activeIdx - 1, 0);
+      items.forEach((it, i) => it.classList.toggle('active', i === activeIdx));
+      items[activeIdx]?.scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter' && activeIdx >= 0) {
+      e.preventDefault();
+      input.value = items[activeIdx].dataset.value;
+      list.classList.remove('visible');
+      if (onSelect) onSelect(input.value);
+    } else if (e.key === 'Escape') {
+      list.classList.remove('visible');
+    }
+  });
+
+  input.addEventListener('blur', () => {
+    setTimeout(() => list.classList.remove('visible'), 150);
+  });
+}
+
+function getPlayersForSelectedGame() {
+  const game = document.getElementById('inputGame')?.value?.trim();
+  if (!game) return state.players;
+  return state.players.filter(p => !p.games || p.games.length === 0 || p.games.includes(game));
+}
+
+function initAutocompletes() {
+  setupAutocomplete('inputGame', 'acGameList', () =>
+    state.games.map(g => ({ label: g }))
+  , () => {
+    // Refresh player lists when game changes
+    document.getElementById('inputPlayer1')?.dispatchEvent(new Event('input'));
+    document.getElementById('inputPlayer2')?.dispatchEvent(new Event('input'));
+  });
+
+  setupAutocomplete('inputPlayer1', 'acPlayer1List', () =>
+    getPlayersForSelectedGame().map(p => ({
+      label: typeof p === 'string' ? p : p.name,
+      avatar: p.avatar || null,
+      tags: p.games?.length ? p.games : null,
+    }))
+  );
+
+  setupAutocomplete('inputPlayer2', 'acPlayer2List', () =>
+    getPlayersForSelectedGame().map(p => ({
+      label: typeof p === 'string' ? p : p.name,
+      avatar: p.avatar || null,
+      tags: p.games?.length ? p.games : null,
+    }))
+  );
+}
+
+// Also refresh autocomplete when game input changes
+document.getElementById('inputGame')?.addEventListener('input', () => {
+  document.getElementById('inputPlayer1')?.dispatchEvent(new Event('focus'));
+  document.getElementById('inputPlayer2')?.dispatchEvent(new Event('focus'));
+});
+
 function updateGamesDatalist() {
-  const dl = document.getElementById('gamesList');
-  if (!dl) return;
-  dl.innerHTML = state.games.map(g => `<option value="${escapeAttr(g)}">`).join('');
+  // Kept for backward compat — autocomplete handles rendering
 }
 
 function updatePlayersDatalist() {
-  const dl = document.getElementById('playersList');
-  if (!dl) return;
-  dl.innerHTML = state.players.map(p => {
-    const name = typeof p === 'string' ? p : p.name;
-    return `<option value="${escapeAttr(name)}">`;
-  }).join('');
+  // Kept for backward compat — autocomplete handles rendering
 }
 
 // ─── BRACKET ────────────────────────────────────────────
@@ -838,4 +937,5 @@ socket.on('bracket:syncCompleted', (data) => {
 document.addEventListener('DOMContentLoaded', () => {
   startTimerLoop();
   setTimeout(scalePreview, 200);
+  initAutocompletes();
 });
