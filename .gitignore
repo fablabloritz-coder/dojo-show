@@ -17,6 +17,11 @@ data/
 
 # Temp launcher script
 _start_server.cmd
+_node_dl.zip
+_node_tmp/
+
+# Portable Node.js (auto-downloaded)
+node_portable/
 
 # OS generated files
 .DS_Store

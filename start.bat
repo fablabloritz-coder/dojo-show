@@ -3,27 +3,107 @@ title DOJO SHOW 2.0
 color 0D
 cd /d "%~dp0"
 
-:: --- Verification Node.js ---
+:: ==========================================
+::  ETAPE 1 : Trouver Node.js
+:: ==========================================
+
+:: 1a. Node systeme ?
 where node >nul 2>&1
-if errorlevel 1 (
-  cls
-  echo.
-  echo  ==========================================
-  echo    DOJO SHOW 2.0 - ERREUR
-  echo  ==========================================
-  echo.
-  echo    Node.js n'est pas installe.
-  echo.
-  echo    Telechargez-le sur : nodejs.org
-  echo    [version 18 LTS ou superieure]
-  echo.
-  echo  ==========================================
-  echo.
-  pause
-  exit /b 1
+if not errorlevel 1 goto NODE_READY
+
+:: 1b. Node portable local ?
+if exist "%~dp0node_portable\node.exe" (
+  set "PATH=%~dp0node_portable;%PATH%"
+  goto NODE_READY
 )
 
-:: --- Installation des dependances si absentes ---
+:: 1c. Node introuvable - proposer le telechargement
+cls
+echo.
+echo  ==========================================
+echo    DOJO SHOW 2.0 - Configuration initiale
+echo  ==========================================
+echo.
+echo    Node.js n'est pas installe sur ce PC.
+echo    Il est necessaire pour faire tourner le serveur.
+echo.
+echo    [1] Telecharger automatiquement (~25 Mo)
+echo        (installe localement dans le dossier)
+echo.
+echo    [2] Quitter et installer manuellement
+echo        depuis nodejs.org
+echo.
+echo  ==========================================
+echo.
+set /p NC="  Choix [1-2] : "
+
+if not "%NC%"=="1" (
+  echo.
+  echo  Rendez-vous sur https://nodejs.org
+  echo  Installez la version LTS puis relancez start.bat
+  echo.
+  pause
+  goto QUIT
+)
+
+echo.
+echo  [*] Telechargement de Node.js portable...
+echo  [*] Cela peut prendre 1-2 minutes selon la connexion.
+echo.
+
+set "NODE_VER=v20.18.0"
+set "NODE_ZIP=%~dp0_node_dl.zip"
+set "NODE_URL=https://nodejs.org/dist/%NODE_VER%/node-%NODE_VER%-win-x64.zip"
+
+:: Telechargement : curl (Windows 10+), sinon PowerShell
+curl.exe -L --progress-bar -o "%NODE_ZIP%" "%NODE_URL%" 2>nul
+if not exist "%NODE_ZIP%" (
+  echo  [*] Methode alternative en cours...
+  powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '%NODE_URL%' -OutFile '%NODE_ZIP%'"
+)
+
+if not exist "%NODE_ZIP%" (
+  echo.
+  echo  [!] Echec du telechargement.
+  echo  [!] Verifiez votre connexion internet.
+  echo  [!] Ou installez Node.js depuis https://nodejs.org
+  echo.
+  pause
+  goto QUIT
+)
+
+echo  [*] Extraction en cours...
+powershell -Command "Expand-Archive -Path '%NODE_ZIP%' -DestinationPath '%~dp0_node_tmp' -Force"
+
+:: Deplacer le dossier extrait vers node_portable
+if exist "%~dp0node_portable" rd /s /q "%~dp0node_portable" >nul 2>&1
+for /d %%D in ("%~dp0_node_tmp\node-*") do (
+  move "%%D" "%~dp0node_portable" >nul
+)
+
+:: Nettoyage fichiers temporaires
+del "%NODE_ZIP%" >nul 2>&1
+rd /s /q "%~dp0_node_tmp" >nul 2>&1
+
+if not exist "%~dp0node_portable\node.exe" (
+  echo.
+  echo  [!] L'extraction a echoue.
+  echo  [!] Installez Node.js depuis https://nodejs.org
+  echo.
+  pause
+  goto QUIT
+)
+
+set "PATH=%~dp0node_portable;%PATH%"
+echo.
+echo  [OK] Node.js installe avec succes !
+echo.
+
+:NODE_READY
+
+:: ==========================================
+::  ETAPE 2 : Installer les dependances
+:: ==========================================
 if not exist "node_modules" (
   echo.
   echo  [*] Premiere utilisation - Installation des dependances...
@@ -39,35 +119,56 @@ if not exist "node_modules" (
     exit /b 1
   )
   echo.
-  echo  [OK] Dependances installees avec succes !
+  echo  [OK] Dependances installees !
   echo.
 )
 
+:: ==========================================
+::  ETAPE 3 : Detecter l'adresse IP locale
+:: ==========================================
+set "LAN_IP=introuvable"
+for /f "usebackq tokens=*" %%i in (`powershell -NoProfile -Command "(Get-NetIPAddress -AddressFamily IPv4 -PrefixOrigin Dhcp,Manual -ErrorAction SilentlyContinue | Select-Object -First 1).IPAddress"`) do set "LAN_IP=%%i"
+
+:: ==========================================
+::  ETAPE 4 : Menu de lancement
+:: ==========================================
+cls
 echo.
 echo  ==========================================
 echo    DOJO SHOW 2.0 - Lanceur
 echo  ==========================================
 echo.
+echo    Adresses du serveur :
+echo    - Sur CE PC :  http://localhost:3000
+echo    - Sur le LAN : http://%LAN_IP%:3000
+echo.
+echo    Les autres organisateurs peuvent ouvrir
+echo    l'adresse LAN dans leur navigateur.
+echo    Aucune installation requise chez eux !
+echo.
+echo  ------------------------------------------
+echo    Ouvrir avec :
 echo    1. Google Chrome  [mode app]
 echo    2. Microsoft Edge [mode app]
 echo    3. Firefox
 echo    4. Navigateur par defaut
 echo    5. Serveur uniquement [pas de navigateur]
-echo.
 echo  ==========================================
 echo.
-
 set /p CHOIX="  Choix [1-5] : "
 
-:: --- Demarrer le serveur Node ---
+:: ==========================================
+::  ETAPE 5 : Demarrer le serveur
+:: ==========================================
 echo.
 echo  [*] Demarrage du serveur...
 
-:: Ecrire un script temporaire pour le serveur
+:: Script temporaire pour la fenetre serveur
 >"%~dp0_start_server.cmd" (
   echo @echo off
   echo title DOJO-SERVER
   echo cd /d "%~dp0"
+  echo set "PATH=%~dp0node_portable;%%PATH%%"
   echo node server.js
   echo echo.
   echo echo  [!] Le serveur s'est arrete.
@@ -144,9 +245,15 @@ goto END
 
 :SERVERONLY
 echo.
-echo  [*] Serveur demarre sur http://localhost:3000
-echo  [*] Admin  : http://localhost:3000/admin.html
-echo  [*] Display: http://localhost:3000/display.html
+echo  ==========================================
+echo    Serveur demarre !
+echo  ------------------------------------------
+echo    Sur CE PC :  http://localhost:3000
+echo    Sur le LAN : http://%LAN_IP%:3000
+echo  ------------------------------------------
+echo    Admin  : /admin.html
+echo    Display: /display.html
+echo  ==========================================
 echo.
 echo  Appuyez sur une touche pour arreter le serveur...
 pause >nul
@@ -156,8 +263,10 @@ goto QUIT
 :END
 echo.
 echo  ==========================================
-echo    Serveur : http://localhost:3000
-echo    Admin   : ouvert dans le navigateur
+echo    Serveur demarre !
+echo  ------------------------------------------
+echo    Sur CE PC :  http://localhost:3000
+echo    Sur le LAN : http://%LAN_IP%:3000
 echo  ------------------------------------------
 echo    Fermez cette fenetre pour tout stopper
 echo  ==========================================

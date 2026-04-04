@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs').promises;
 const fsSync = require('fs');
 const crypto = require('crypto');
+const os = require('os');
 
 const app = express();
 const server = http.createServer(app);
@@ -1332,11 +1333,25 @@ process.on('SIGINT', () => {
   });
 });
 
+function getLocalIP() {
+  const nets = os.networkInterfaces();
+  for (const name of Object.keys(nets)) {
+    for (const net of nets[name]) {
+      if (net.family === 'IPv4' && !net.internal) return net.address;
+    }
+  }
+  return 'localhost';
+}
+
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`\n  ╔══════════════════════════════════════╗`);
-  console.log(`  ║       DOJO SHOW 2.0 - Serveur        ║`);
-  console.log(`  ╠══════════════════════════════════════╣`);
-  console.log(`  ║  Local:   http://localhost:${PORT}       ║`);
-  console.log(`  ║  Réseau:  http://<IP>:${PORT}          ║`);
-  console.log(`  ╚══════════════════════════════════════╝\n`);
+  const ip = getLocalIP();
+  console.log(`\n  ==========================================`);
+  console.log(`       DOJO SHOW 2.0 - Serveur`);
+  console.log(`  ==========================================`);
+  console.log(`  Local:   http://localhost:${PORT}`);
+  console.log(`  Reseau:  http://${ip}:${PORT}`);
+  console.log(`  ------------------------------------------`);
+  console.log(`  Les autres organisateurs peuvent ouvrir`);
+  console.log(`  l'adresse reseau dans leur navigateur.`);
+  console.log(`  ==========================================\n`);
 });
