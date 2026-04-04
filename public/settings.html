@@ -268,6 +268,13 @@
       </div>
       <button class="btn btn-secondary" onclick="switchTab('startgg')">🔗 Importer depuis Start.gg</button>
 
+      <div class="bulk-opacity-row">
+        <label for="bulkGameOpacity">Opacité images (tous les jeux)</label>
+        <input type="range" id="bulkGameOpacity" min="0" max="100" step="5" value="30" oninput="document.getElementById('bulkGameOpacityVal').textContent=this.value+'%'">
+        <span id="bulkGameOpacityVal">30%</span>
+        <button class="btn btn-secondary btn-sm" onclick="applyGameOpacityToAll()">Appliquer à tous</button>
+      </div>
+
       <div class="list-container" id="gamesList">
         <div class="empty-state-sm">Aucun jeu enregistré</div>
       </div>

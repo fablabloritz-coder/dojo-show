@@ -798,6 +798,21 @@ function updateGameSetting(gameName, prop, value) {
   socket.emit('games:updateSettings', { name: gameName, [prop]: value });
 }
 
+function applyGameOpacityToAll() {
+  const slider = document.getElementById('bulkGameOpacity');
+  if (!slider) return;
+  const opacity = Math.max(0, Math.min(1, (parseInt(slider.value, 10) || 0) / 100));
+
+  if (!state.games || state.games.length === 0) {
+    alert('Aucun jeu à mettre à jour.');
+    return;
+  }
+
+  state.games.forEach((gameName) => {
+    socket.emit('games:updateSettings', { name: gameName, imageOpacity: opacity });
+  });
+}
+
 function uploadGameImage(gameName, input) {
   if (!input.files || !input.files[0]) return;
   const reader = new FileReader();

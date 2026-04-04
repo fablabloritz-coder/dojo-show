@@ -763,6 +763,26 @@ body {
   border: 1px solid rgba(255,255,255,0.1);
 }
 
+.bulk-opacity-row {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.bulk-opacity-row label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.bulk-opacity-row input[type="range"] {
+  width: 160px;
+}
+.bulk-opacity-row span {
+  min-width: 36px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 /* ─── IMPORT PANEL ──────────────────────────── */
 .import-step {
   padding: 16px;

@@ -201,13 +201,25 @@ let avatarPruneTimer = null;
 
 function getReferencedAvatarFilenames() {
   const files = new Set();
-  if (!Array.isArray(state.players)) return files;
-  for (const p of state.players) {
-    const a = (p && typeof p.avatar === 'string') ? p.avatar : '';
-    if (!a.startsWith('/avatars/')) continue;
-    const filename = a.slice('/avatars/'.length).trim();
-    if (filename) files.add(filename);
+  if (Array.isArray(state.players)) {
+    for (const p of state.players) {
+      const a = (p && typeof p.avatar === 'string') ? p.avatar : '';
+      if (!a.startsWith('/avatars/')) continue;
+      const filename = a.slice('/avatars/'.length).trim();
+      if (filename) files.add(filename);
+    }
   }
+
+  // Game backgrounds are also stored in /avatars and must be preserved.
+  if (state.gameSettings && typeof state.gameSettings === 'object') {
+    for (const gs of Object.values(state.gameSettings)) {
+      const img = (gs && typeof gs.image === 'string') ? gs.image : '';
+      if (!img.startsWith('/avatars/')) continue;
+      const filename = img.slice('/avatars/'.length).trim();
+      if (filename) files.add(filename);
+    }
+  }
+
   return files;
 }
 
@@ -295,7 +307,23 @@ function loadState() {
 }
 
 function broadcast() {
+  markStateDirty();
   io.emit('state:full', getClientState());
+}
+
+function normalizeRestoredMatch(m) {
+  const match = (m && typeof m === 'object') ? m : {};
+  const accumulated = Number(match.timerAccumulated) || 0;
+  const startedAt = Number(match.timerStartedAt) || 0;
+  const extraElapsed = (match.timerRunning && startedAt > 0)
+    ? Math.max(0, Date.now() - startedAt)
+    : 0;
+  return {
+    ...match,
+    timerRunning: false,
+    timerStartedAt: 0,
+    timerAccumulated: accumulated + extraElapsed,
+  };
 }
 
 // ─── TOURNAMENT HELPERS ─────────────────────────────────
@@ -412,6 +440,19 @@ async function resolveAvatarInput(avatarInput, prefix = 'avatar') {
     return (await saveDataUrlAvatar(avatarInput, prefix)) || DEFAULT_AVATAR;
   }
   return DEFAULT_AVATAR;
+}
+
+async function resolveGameImageInput(imageInput) {
+  if (!imageInput || typeof imageInput !== 'string') return null;
+  if (imageInput.startsWith('/avatars/')) return imageInput;
+  if (imageInput.startsWith('http://') || imageInput.startsWith('https://')) {
+    // Game artworks are often larger than player avatars.
+    return await urlToLocalAvatar(imageInput, 5_000_000);
+  }
+  if (imageInput.startsWith('data:image/')) {
+    return await saveDataUrlAvatar(imageInput, 'game', 5_000_000);
+  }
+  return null;
 }
 
 async function migrateStoredPlayerAvatars(prefix = 'migrated') {
@@ -789,6 +830,7 @@ io.on('connection', (socket) => {
       gs.imageOpacity = Math.max(0, Math.min(1, parseFloat(data.imageOpacity) || 0.3));
     }
     state.gameSettings[name] = gs;
+    if (data.image !== undefined) scheduleAvatarPrune();
     broadcast();
   });
 
@@ -904,8 +946,8 @@ io.on('connection', (socket) => {
     // If Start.gg provided a game image, save it
     if (data.startggImage && typeof data.startggImage === 'string') {
       try {
-        const localPath = await resolveAvatarInput(data.startggImage, 'game');
-        if (localPath && localPath !== DEFAULT_AVATAR) {
+        const localPath = await resolveGameImageInput(data.startggImage);
+        if (localPath) {
           const gs = state.gameSettings[name] || {};
           gs.image = localPath;
           gs.imageOpacity = gs.imageOpacity || 0.3;
@@ -919,6 +961,7 @@ io.on('connection', (socket) => {
   socket.on('games:delete', (data) => {
     state.games = state.games.filter(g => g !== data.name);
     delete state.gameSettings[data.name];
+    scheduleAvatarPrune();
     broadcast();
   });
 
@@ -1025,11 +1068,7 @@ io.on('connection', (socket) => {
       const backupData = JSON.parse(await fs.readFile(backupPath, 'utf8'));
       
       // Restore state but reset runtime properties
-      state.matches = (backupData.matches || []).map(m => ({
-        ...m,
-        timerRunning: false,
-        timerStartedAt: 0,
-      }));
+      state.matches = (backupData.matches || []).map(normalizeRestoredMatch);
       state.history = backupData.history || [];
       state.settings = backupData.settings || state.settings;
       state.bracket = backupData.bracket || state.bracket;
@@ -1313,6 +1352,14 @@ loadState();
 let saveInterval;
 let isSaving = false;
 let savePending = false;
+let saveDebounceTimer = null;
+
+function markStateDirty() {
+  if (saveDebounceTimer) clearTimeout(saveDebounceTimer);
+  saveDebounceTimer = setTimeout(() => {
+    scheduleAutoSave().catch(() => {});
+  }, 1200);
+}
 
 async function scheduleAutoSave(force = false) {
   if (isSaving && !force) {
@@ -1344,6 +1391,16 @@ restartAutoSave();
 process.on('SIGINT', () => {
   console.log('\n🛑 Arrêt du serveur...');
   clearInterval(saveInterval);
+  if (saveDebounceTimer) clearTimeout(saveDebounceTimer);
+  scheduleAutoSave(true).then(() => {
+    process.exit(0);
+  });
+});
+
+process.on('SIGTERM', () => {
+  console.log('\n🛑 Arrêt du serveur (SIGTERM)...');
+  clearInterval(saveInterval);
+  if (saveDebounceTimer) clearTimeout(saveDebounceTimer);
   scheduleAutoSave(true).then(() => {
     process.exit(0);
   });
