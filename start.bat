@@ -1,4 +1,5 @@
 @echo off
+setlocal enabledelayedexpansion
 title DOJO SHOW 2.0
 color 0D
 cd /d "%~dp0"
@@ -169,16 +170,70 @@ echo  [*] Demarrage du serveur...
   echo title DOJO-SERVER
   echo cd /d "%~dp0"
   echo set "PATH=%~dp0node_portable;%%PATH%%"
+  echo echo.
+  echo echo  [*] Demarrage du serveur Node.js...
+  echo echo.
   echo node server.js
+  echo set EXITCODE=%%errorlevel%%
+  echo echo.
+  echo if %%EXITCODE%% neq 0 (
+  echo   echo  ==========================================
+  echo   echo    [!] ERREUR - Le serveur a plante
+  echo   echo  ==========================================
+  echo   echo.
+  echo   echo    Code erreur : %%EXITCODE%%
+  echo   echo.
+  echo   echo    Causes possibles :
+  echo   echo    - Port 3000 deja utilise
+  echo   echo    - Dependance manquante
+  echo   echo    - Erreur dans server.js
+  echo   echo.
+  echo   echo    Relancez start.bat apres avoir
+  echo   echo    corrige le probleme.
+  echo   echo  ==========================================
+  echo ^)
   echo echo.
   echo echo  [!] Le serveur s'est arrete.
-  echo echo  [!] Verifiez les messages ci-dessus.
   echo pause
 )
 start "DOJO-SERVER" "%~dp0_start_server.cmd"
 
-:: Attendre que le serveur soit pret
-timeout /t 3 /nobreak >nul
+:: Attendre que le serveur reponde vraiment (max 15 secondes)
+echo  [*] Attente du demarrage du serveur...
+set "SERVER_OK=0"
+for /L %%i in (1,1,15) do (
+  if "!SERVER_OK!"=="0" (
+    powershell -NoProfile -Command "try { $r = Invoke-WebRequest -Uri 'http://localhost:3000' -UseBasicParsing -TimeoutSec 1 -ErrorAction Stop; exit 0 } catch { exit 1 }" >nul 2>&1
+    if not errorlevel 1 (
+      set "SERVER_OK=1"
+    ) else (
+      timeout /t 1 /nobreak >nul
+    )
+  )
+)
+
+if "%SERVER_OK%"=="0" (
+  echo.
+  echo  ==========================================
+  echo    [!] Le serveur n'a pas demarre.
+  echo  ==========================================
+  echo.
+  echo    Verifiez la fenetre DOJO-SERVER pour
+  echo    voir les messages d'erreur.
+  echo.
+  echo    Causes possibles :
+  echo    - Port 3000 deja utilise par un autre programme
+  echo    - npm install a echoue (pas de connexion ?)
+  echo    - Erreur dans un fichier de configuration
+  echo.
+  echo  ==========================================
+  echo.
+  pause
+  taskkill /FI "WINDOWTITLE eq DOJO-SERVER" /F >nul 2>&1
+  goto QUIT
+)
+
+echo  [OK] Serveur pret !
 
 set URL=http://localhost:3000/admin.html
 
