@@ -484,9 +484,6 @@ async function importPlayersFromStartGG() {
   socket.emit('startgg:setData', { players });
   const gameCount = new Set(players.flatMap(p => p.games)).size;
   alert(`${players.length} joueur(s) importé(s) sur ${gameCount} jeu(x)`);
-  } catch (err) {
-    alert('Erreur : ' + err.message);
-  }
 }
 
 // ─── ACCENT COLOR ───────────────────────────────────────
