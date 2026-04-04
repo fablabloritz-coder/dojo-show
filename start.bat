@@ -2,6 +2,47 @@
 chcp 65001 >nul 2>&1
 title DOJO SHOW 2.0 — Lanceur
 color 0D
+cd /d "%~dp0"
+
+:: ─── Vérification Node.js ──────────────────────────────
+where node >nul 2>&1
+if errorlevel 1 (
+  cls
+  echo.
+  echo  ╔══════════════════════════════════════════╗
+  echo  ║         DOJO SHOW 2.0 — ERREUR           ║
+  echo  ╠══════════════════════════════════════════╣
+  echo  ║                                          ║
+  echo  ║  Node.js n'est pas installe.             ║
+  echo  ║                                          ║
+  echo  ║  Telechargez-le sur : nodejs.org         ║
+  echo  ║  (version 18 LTS ou superieure)          ║
+  echo  ║                                          ║
+  echo  ╚══════════════════════════════════════════╝
+  echo.
+  pause
+  exit /b 1
+)
+
+:: ─── Installation des dépendances si absentes ──────────
+if not exist node_modules (
+  echo.
+  echo  [*] Premiere utilisation - Installation des dependances...
+  echo  [*] Cela peut prendre quelques secondes.
+  echo.
+  call npm install
+  if errorlevel 1 (
+    echo.
+    echo  [!] ERREUR : npm install a echoue.
+    echo  [!] Verifiez votre connexion internet et relancez.
+    echo.
+    pause
+    exit /b 1
+  )
+  echo.
+  echo  [*] Dependances installees avec succes !
+  echo.
+)
 
 echo.
 echo  ╔══════════════════════════════════════════╗
@@ -19,11 +60,10 @@ echo.
 
 set /p CHOIX="  Choix [1-5] : "
 
-:: Demarrer le serveur Node
+:: ─── Démarrer le serveur Node ──────────────────────────
 echo.
 echo  [*] Demarrage du serveur...
-cd /d "%~dp0"
-start "DOJO-SERVER" /min cmd /c "node server.js"
+start "DOJO-SERVER" cmd /k "cd /d "%~dp0" && node server.js || (echo. && echo  [!] Le serveur a rencontre une erreur. && echo  [!] Verifiez les logs ci-dessus. && pause)"
 
 :: Attendre que le serveur soit pret
 timeout /t 2 /nobreak >nul
