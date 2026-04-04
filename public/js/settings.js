@@ -403,40 +403,87 @@ async function importPlayersFromStartGG() {
     return;
   }
 
-  const query = `query($slug:String!){tournament(slug:$slug){events{name videogame{name} entrants(query:{perPage:500}){nodes{participants{gamerTag user{images(type:"profile"){url}}}}}}}}`;
+  const slug = slugMatch[1];
+
+  // Step 1: Get list of events (lightweight query)
+  const eventsQuery = `query($slug:String!){tournament(slug:$slug){events{id name videogame{name}}}}`;
+  let events;
   try {
     const resp = await fetch('/api/startgg', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query, variables: { slug: slugMatch[1] }, apiKey }),
+      body: JSON.stringify({ query: eventsQuery, variables: { slug }, apiKey }),
     });
     const data = await resp.json();
+    if (data.error) throw new Error(data.error);
+    if (data.errors) throw new Error(data.errors.map(e => e.message).join(', '));
     if (!data.data?.tournament) throw new Error('Tournoi introuvable');
+    events = data.data.tournament.events || [];
+  } catch (err) {
+    alert('Erreur récupération événements : ' + err.message);
+    return;
+  }
 
-    const playerMap = new Map();
-    for (const event of (data.data.tournament.events || [])) {
-      const gameName = event.videogame?.name || event.name || 'Inconnu';
-      for (const entrant of (event.entrants?.nodes || [])) {
-        for (const p of (entrant.participants || [])) {
-          const tag = p.gamerTag;
-          if (!tag) continue;
-          if (playerMap.has(tag)) {
-            playerMap.get(tag).games.push(gameName);
-          } else {
-            const avatarUrl = p.user?.images?.[0]?.url || null;
-            playerMap.set(tag, { name: tag, avatar: avatarUrl, games: [gameName] });
+  if (events.length === 0) {
+    alert('Aucun événement trouvé dans ce tournoi.');
+    return;
+  }
+
+  // Step 2: For each event, paginate entrants
+  const playerMap = new Map();
+  const PER_PAGE = 100;
+
+  for (const event of events) {
+    const gameName = event.videogame?.name || event.name || 'Inconnu';
+    let page = 1;
+    let hasMore = true;
+
+    while (hasMore) {
+      const pageQuery = `query($eventId:ID!,$page:Int!,$perPage:Int!){event(id:$eventId){entrants(query:{page:$page,perPage:$perPage}){pageInfo{totalPages}nodes{participants{gamerTag user{images(type:"profile"){url}}}}}}}`;
+      try {
+        const resp = await fetch('/api/startgg', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: pageQuery, variables: { eventId: event.id, page, perPage: PER_PAGE }, apiKey }),
+        });
+        const data = await resp.json();
+        if (data.errors) { console.warn('Start.gg page error:', data.errors); break; }
+        const entrants = data.data?.event?.entrants;
+        if (!entrants?.nodes) break;
+
+        for (const entrant of entrants.nodes) {
+          for (const p of (entrant.participants || [])) {
+            const tag = p.gamerTag;
+            if (!tag) continue;
+            if (playerMap.has(tag)) {
+              playerMap.get(tag).games.push(gameName);
+            } else {
+              const avatarUrl = p.user?.images?.[0]?.url || null;
+              playerMap.set(tag, { name: tag, avatar: avatarUrl, games: [gameName] });
+            }
           }
         }
+
+        hasMore = page < (entrants.pageInfo?.totalPages || 1);
+        page++;
+      } catch (err) {
+        console.warn(`Erreur page ${page} event ${event.name}:`, err.message);
+        break;
       }
     }
+  }
 
-    const players = [...playerMap.values()];
-    // Deduplicate game list per player
-    players.forEach(p => p.games = [...new Set(p.games)]);
+  const players = [...playerMap.values()];
+  players.forEach(p => p.games = [...new Set(p.games)]);
 
-    socket.emit('startgg:setData', { players });
-    const gameCount = new Set(players.flatMap(p => p.games)).size;
-    alert(`${players.length} joueur(s) importé(s) sur ${gameCount} jeu(x)`);
+  if (players.length === 0) {
+    alert('Aucun joueur trouvé. Vérifiez que le tournoi a des inscrits.');
+    return;
+  }
+
+  socket.emit('startgg:setData', { players });
+  const gameCount = new Set(players.flatMap(p => p.games)).size;
+  alert(`${players.length} joueur(s) importé(s) sur ${gameCount} jeu(x)`);
   } catch (err) {
     alert('Erreur : ' + err.message);
   }

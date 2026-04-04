@@ -183,6 +183,14 @@ set /p CHOIX="  Choix [1-5] : "
 ::  ETAPE 5 : Demarrer le serveur
 :: ==========================================
 echo.
+
+:: Verifier si le port 3000 est deja occupe et tuer le processus
+for /f "tokens=5" %%p in ('netstat -aon ^| findstr ":3000.*LISTENING" 2^>nul') do (
+  echo  [!] Port 3000 deja utilise par PID %%p - arret en cours...
+  taskkill /PID %%p /F >nul 2>&1
+  timeout /t 1 /nobreak >nul
+)
+
 echo  [*] Demarrage du serveur...
 
 :: Ecrire le script serveur temporaire ligne par ligne pour eviter les problemes de parentheses
