@@ -15,6 +15,9 @@ data/
 .env.test.local
 .env.production.local
 
+# Temp launcher script
+_start_server.cmd
+
 # OS generated files
 .DS_Store
 .DS_Store?
