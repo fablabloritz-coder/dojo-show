@@ -73,6 +73,27 @@ let state = {
   gameSettings: {},  // { gameName: { color, image, imageOpacity } }
 };
 
+const DEFAULT_SETTINGS = JSON.parse(JSON.stringify(state.settings));
+const DEFAULT_BRACKET = { rounds: [], name: '', autoTournament: false };
+
+function applySettingsDefaults(rawSettings) {
+  const incoming = (rawSettings && typeof rawSettings === 'object') ? rawSettings : {};
+  const merged = { ...DEFAULT_SETTINGS, ...incoming };
+  merged.layout = { ...DEFAULT_SETTINGS.layout, ...(incoming.layout || {}) };
+  merged.autoRotation = { ...DEFAULT_SETTINGS.autoRotation, ...(incoming.autoRotation || {}) };
+  merged.fontProfiles = { ...DEFAULT_SETTINGS.fontProfiles, ...(incoming.fontProfiles || {}) };
+  return merged;
+}
+
+function applyBracketDefaults(rawBracket) {
+  const incoming = (rawBracket && typeof rawBracket === 'object') ? rawBracket : {};
+  return {
+    ...DEFAULT_BRACKET,
+    ...incoming,
+    rounds: Array.isArray(incoming.rounds) ? incoming.rounds : [],
+  };
+}
+
 const DEFAULT_AVATAR = 'data:image/svg+xml;base64,' + Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80"><rect width="80" height="80" rx="40" fill="#7b2ff7"/><text x="40" y="52" text-anchor="middle" fill="white" font-size="32" font-family="sans-serif">?</text></svg>').toString('base64');
 
 const FONT_WHITELIST = ['Inter', 'Roboto', 'Poppins', 'Montserrat', 'Orbitron', 'Press Start 2P', 'Raleway', 'Oswald'];
@@ -279,20 +300,13 @@ function loadState() {
       timerStartedAt: 0,
     }));
     state.history = data.history || [];
-    state.settings = data.settings || state.settings;
-    // Ensure new settings fields have defaults
-    if (!state.settings.accentColor) state.settings.accentColor = '#7b2ff7';
-    if (!state.settings.fontFamily) state.settings.fontFamily = 'Inter';
-    if (state.settings.autoRotation === undefined) state.settings.autoRotation = { matches: 0, waiting: 0, bracket: 0 };
+    state.settings = applySettingsDefaults(data.settings);
     // Migrate old single-value autoRotation to per-view object
     if (typeof state.settings.autoRotation === 'number') {
       const v = state.settings.autoRotation;
       state.settings.autoRotation = { matches: v, waiting: v, bracket: v };
     }
-    if (state.settings.highlightMatchId === undefined) state.settings.highlightMatchId = null;
-    if (state.settings.rotationEnabled === undefined) state.settings.rotationEnabled = false;
-    if (state.settings.autoSaveInterval === undefined) state.settings.autoSaveInterval = 30;
-    state.bracket = data.bracket || state.bracket;
+    state.bracket = applyBracketDefaults(data.bracket);
     state.startgg = data.startgg || state.startgg;
     state.games = data.games || [];
     state.players = data.players || [];
@@ -481,357 +495,526 @@ io.on('connection', (socket) => {
 
   // --- Match CRUD ---
   socket.on('match:create', (data) => {
-    // Input validation
-    const sanitize = (s, max = 50) => (typeof s === 'string' ? s : '').trim().substring(0, max);
-    const game = sanitize(data.game, 80) || 'Autre';
-    const p1 = sanitize(data.player1, 50) || 'Joueur 1';
-    const p2 = sanitize(data.player2, 50) || 'Joueur 2';
-    const station = sanitize(data.station, 30);
-    const round = sanitize(data.round, 40);
-    const initialStatus = data.status || 'waiting';
-    const match = {
-      id: genId(),
-      game,
-      player1: { name: p1, present: false },
-      player2: { name: p2, present: false },
-      score1: 0,
-      score2: 0,
-      status: initialStatus,
-      winner: null,
-      phase: initialStatus === 'active' ? 'calling' : null,
-      timerRunning: initialStatus === 'active',
-      timerStartedAt: initialStatus === 'active' ? Date.now() : 0,
-      timerAccumulated: 0,
-      timerDuration: Math.max(10, Math.min(600, parseInt(data.timerDuration) || 120)),
-      station,
-      round,
-      streaming: !!data.streaming,
-      order: state.matches.filter(m => m.status === initialStatus).length,
-      createdAt: Date.now(),
-    };
-    state.matches.push(match);
-    if (data.game && !state.games.includes(data.game)) {
-      state.games.push(data.game);
+    try {
+      if (!data || typeof data !== 'object') {
+        console.warn('⚠ match:create received invalid data type');
+        return;
+      }
+      // Input validation
+      const sanitize = (s, max = 50) => (typeof s === 'string' ? s : '').trim().substring(0, max);
+      const game = sanitize(data.game, 80) || 'Autre';
+      const p1 = sanitize(data.player1, 50) || 'Joueur 1';
+      const p2 = sanitize(data.player2, 50) || 'Joueur 2';
+      const station = sanitize(data.station, 30);
+      const round = sanitize(data.round, 40);
+      const initialStatus = data.status || 'waiting';
+      if (!['waiting', 'active', 'cancelled'].includes(initialStatus)) {
+        console.warn('⚠ match:create invalid status:', initialStatus);
+        return;
+      }
+      const match = {
+        id: genId(),
+        game,
+        player1: { name: p1, present: false },
+        player2: { name: p2, present: false },
+        score1: 0,
+        score2: 0,
+        status: initialStatus,
+        winner: null,
+        phase: initialStatus === 'active' ? 'calling' : null,
+        timerRunning: initialStatus === 'active',
+        timerStartedAt: initialStatus === 'active' ? Date.now() : 0,
+        timerAccumulated: 0,
+        timerDuration: Math.max(10, Math.min(600, parseInt(data.timerDuration) || 120)),
+        station,
+        round,
+        streaming: !!data.streaming,
+        order: state.matches.filter(m => m.status === initialStatus).length,
+        createdAt: Date.now(),
+      };
+      state.matches.push(match);
+      if (data.game && !state.games.includes(data.game)) {
+        state.games.push(data.game);
+      }
+      broadcast();
+    } catch (err) {
+      console.error('❌ match:create error:', err.message);
     }
-    broadcast();
   });
 
   socket.on('match:update', (data) => {
-    const idx = state.matches.findIndex(m => m.id === data.id);
-    if (idx === -1) return;
-    const match = state.matches[idx];
-    // Whitelist updatable fields
-    const allowed = ['game', 'station', 'round', 'score1', 'score2', 'status', 'order', 'streaming'];
-    for (const key of allowed) {
-      if (data[key] !== undefined) {
-        match[key] = key === 'streaming' ? !!data[key] : data[key];
+    try {
+      if (!data || !data.id || typeof data.id !== 'string') return;
+      const idx = state.matches.findIndex(m => m.id === data.id);
+      if (idx === -1) return;
+      const match = state.matches[idx];
+      // Whitelist updatable fields with type validation
+      const allowed = ['game', 'station', 'round', 'score1', 'score2', 'status', 'order', 'streaming'];
+      for (const key of allowed) {
+        if (data[key] !== undefined) {
+          if (key === 'streaming') {
+            match[key] = !!data[key];
+          } else if (key === 'score1' || key === 'score2' || key === 'order') {
+            match[key] = Math.max(0, parseInt(data[key]) || 0);
+          } else if (typeof data[key] === 'string') {
+            match[key] = data[key].substring(0, key === 'round' ? 40 : 80);
+          }
+        }
       }
+      if (data.player1 && typeof data.player1 === 'object') match.player1 = { ...match.player1, ...data.player1 };
+      if (data.player2 && typeof data.player2 === 'object') match.player2 = { ...match.player2, ...data.player2 };
+      broadcast();
+    } catch (err) {
+      console.error('❌ match:update error:', err.message);
     }
-    if (data.player1) match.player1 = { ...match.player1, ...data.player1 };
-    if (data.player2) match.player2 = { ...match.player2, ...data.player2 };
-    broadcast();
   });
 
   socket.on('match:delete', (data) => {
-    if (state.settings.highlightMatchId === data.id) state.settings.highlightMatchId = null;
-    state.matches = state.matches.filter(m => m.id !== data.id);
-    broadcast();
+    try {
+      if (!data || !data.id || typeof data.id !== 'string') return;
+      if (state.settings.highlightMatchId === data.id) state.settings.highlightMatchId = null;
+      state.matches = state.matches.filter(m => m.id !== data.id);
+      broadcast();
+    } catch (err) {
+      console.error('❌ match:delete error:', err.message);
+    }
   });
 
   socket.on('match:presence', (data) => {
-    const match = state.matches.find(m => m.id === data.id);
-    if (!match || match.phase !== 'calling') return;
-    if (data.player === 1) match.player1.present = !match.player1.present;
-    if (data.player === 2) match.player2.present = !match.player2.present;
-    broadcast();
+    try {
+      if (!data || !data.id || typeof data.id !== 'string') return;
+      const match = state.matches.find(m => m.id === data.id);
+      if (!match || match.phase !== 'calling') return;
+      const player = parseInt(data.player);
+      if (player === 1) match.player1.present = !match.player1.present;
+      else if (player === 2) match.player2.present = !match.player2.present;
+      broadcast();
+    } catch (err) {
+      console.error('❌ match:presence error:', err.message);
+    }
   });
 
   socket.on('match:score', (data) => {
-    const match = state.matches.find(m => m.id === data.id);
-    if (!match || match.phase !== 'playing') return;
-    if (data.player === 1) match.score1 = Math.max(0, match.score1 + data.delta);
-    if (data.player === 2) match.score2 = Math.max(0, match.score2 + data.delta);
-    broadcast();
+    try {
+      if (!data || !data.id || typeof data.id !== 'string') return;
+      const match = state.matches.find(m => m.id === data.id);
+      if (!match || match.phase !== 'playing') return;
+      const delta = Number(data.delta) || 0;
+      if (data.player === 1) match.score1 = Math.max(0, match.score1 + delta);
+      if (data.player === 2) match.score2 = Math.max(0, match.score2 + delta);
+      broadcast();
+    } catch (err) {
+      console.error('❌ match:score error:', err.message);
+    }
   });
 
   socket.on('match:activate', (data) => {
-    const match = state.matches.find(m => m.id === data.id);
-    if (!match) return;
-    match.status = 'active';
-    match.phase = 'calling';
-    match.player1.present = false;
-    match.player2.present = false;
-    match.timerRunning = true;
-    match.timerStartedAt = Date.now();
-    match.timerAccumulated = 0;
-    broadcast();
+    try {
+      if (!data || !data.id || typeof data.id !== 'string') return;
+      const match = state.matches.find(m => m.id === data.id);
+      if (!match) return;
+      match.status = 'active';
+      match.phase = 'calling';
+      match.player1.present = false;
+      match.player2.present = false;
+      match.timerRunning = true;
+      match.timerStartedAt = Date.now();
+      match.timerAccumulated = 0;
+      broadcast();
+    } catch (err) {
+      console.error('❌ match:activate error:', err.message);
+    }
   });
 
   socket.on('match:toQueue', (data) => {
-    const match = state.matches.find(m => m.id === data.id);
-    if (!match) return;
-    match.status = 'waiting';
-    match.phase = null;
-    match.winner = null;
-    if (match.timerRunning) {
-      match.timerAccumulated += Date.now() - match.timerStartedAt;
+    try {
+      if (!data || !data.id || typeof data.id !== 'string') return;
+      const match = state.matches.find(m => m.id === data.id);
+      if (!match) return;
+      match.status = 'waiting';
+      match.phase = null;
+      match.winner = null;
+      if (match.timerRunning) {
+        match.timerAccumulated += Date.now() - match.timerStartedAt;
+      }
+      match.timerRunning = false;
+      match.timerAccumulated = 0;
+      broadcast();
+    } catch (err) {
+      console.error('❌ match:toQueue error:', err.message);
     }
-    match.timerRunning = false;
-    match.timerAccumulated = 0;
-    broadcast();
   });
 
   // --- Match Workflow: Launch, Declare, Validate, Forfeit, Cancel, Restore ---
   socket.on('match:launch', (data) => {
-    const match = state.matches.find(m => m.id === data.id);
-    if (!match || match.phase !== 'calling') return;
-    if (!match.player1.present || !match.player2.present) return;
-    match.phase = 'playing';
-    if (match.timerRunning) {
-      match.timerAccumulated += Date.now() - match.timerStartedAt;
+    try {
+      if (!data || !data.id || typeof data.id !== 'string') return;
+      const match = state.matches.find(m => m.id === data.id);
+      if (!match || match.phase !== 'calling') return;
+      if (!match.player1.present || !match.player2.present) return;
+      match.phase = 'playing';
+      if (match.timerRunning) {
+        match.timerAccumulated += Date.now() - match.timerStartedAt;
+      }
+      match.timerRunning = true;
+      match.timerStartedAt = Date.now();
+      match.timerAccumulated = 0;
+      broadcast();
+    } catch (err) {
+      console.error('❌ match:launch error:', err.message);
     }
-    match.timerRunning = true;
-    match.timerStartedAt = Date.now();
-    match.timerAccumulated = 0;
-    broadcast();
   });
 
   socket.on('match:declareWinner', (data) => {
-    const match = state.matches.find(m => m.id === data.id);
-    if (!match || (match.phase !== 'playing' && match.phase !== 'calling')) return;
-    if (data.winner !== 1 && data.winner !== 2) return;
-    match.phase = 'decided';
-    match.winner = data.winner; // 1 or 2
-    if (match.timerRunning) {
-      match.timerAccumulated += Date.now() - match.timerStartedAt;
-      match.timerRunning = false;
+    try {
+      if (!data || !data.id || typeof data.id !== 'string') return;
+      const match = state.matches.find(m => m.id === data.id);
+      if (!match || (match.phase !== 'playing' && match.phase !== 'calling')) return;
+      const winner = parseInt(data.winner);
+      if (winner !== 1 && winner !== 2) return;
+      match.phase = 'decided';
+      match.winner = winner; // 1 or 2
+      if (match.timerRunning) {
+        match.timerAccumulated += Date.now() - match.timerStartedAt;
+        match.timerRunning = false;
+      }
+      // Mark match as part of bracket if in auto tournament mode
+      if (state.bracket.autoTournament && match.bracketMatch) {
+        match.bracketMatch = true;
+      }
+      broadcast();
+    } catch (err) {
+      console.error('❌ match:declareWinner error:', err.message);
     }
-    // Mark match as part of bracket if in auto tournament mode
-    if (state.bracket.autoTournament && match.bracketMatch) {
-      match.bracketMatch = true;
-    }
-    broadcast();
   });
 
   socket.on('match:undeclare', (data) => {
-    const match = state.matches.find(m => m.id === data.id);
-    if (!match || match.phase !== 'decided') return;
-    match.phase = 'playing';
-    match.winner = null;
-    broadcast();
+    try {
+      if (!data || !data.id || typeof data.id !== 'string') return;
+      const match = state.matches.find(m => m.id === data.id);
+      if (!match || match.phase !== 'decided') return;
+      match.phase = 'playing';
+      match.winner = null;
+      broadcast();
+    } catch (err) {
+      console.error('❌ match:undeclare error:', err.message);
+    }
   });
 
   socket.on('match:validate', (data) => {
-    const match = state.matches.find(m => m.id === data.id);
-    if (!match || match.phase !== 'decided') return;
-    
-    // Update bracket if in auto tournament mode
-    if (state.bracket.autoTournament && match.bracketMatch) {
-      updateBracketFromMatch(match);
+    try {
+      if (!data || !data.id || typeof data.id !== 'string') return;
+      const match = state.matches.find(m => m.id === data.id);
+      if (!match || match.phase !== 'decided') return;
+      
+      // Update bracket if in auto tournament mode
+      if (state.bracket.autoTournament && match.bracketMatch) {
+        try {
+          updateBracketFromMatch(match);
+        } catch (e) {
+          console.error('⚠ updateBracketFromMatch failed:', e.message);
+        }
+      }
+      
+      state.history.unshift({
+        id: genId(),
+        game: match.game,
+        player1: match.player1.name,
+        player2: match.player2.name,
+        score1: match.score1,
+        score2: match.score2,
+        winner: match.winner,
+        station: match.station,
+        round: match.round,
+        streaming: match.streaming || false,
+        finishedAt: Date.now(),
+      });
+      state.matches = state.matches.filter(m => m.id !== match.id);
+      // Clear highlight if this match was highlighted
+      if (state.settings.highlightMatchId === match.id) state.settings.highlightMatchId = null;
+      broadcast();
+    } catch (err) {
+      console.error('❌ match:validate error:', err.message);
     }
-    
-    state.history.unshift({
-      id: genId(),
-      game: match.game,
-      player1: match.player1.name,
-      player2: match.player2.name,
-      score1: match.score1,
-      score2: match.score2,
-      winner: match.winner,
-      station: match.station,
-      round: match.round,
-      streaming: match.streaming || false,
-      finishedAt: Date.now(),
-    });
-    state.matches = state.matches.filter(m => m.id !== match.id);
-    // Clear highlight if this match was highlighted
-    if (state.settings.highlightMatchId === match.id) state.settings.highlightMatchId = null;
-    broadcast();
   });
 
   socket.on('match:forfeit', (data) => {
-    const match = state.matches.find(m => m.id === data.id);
-    if (!match || match.phase !== 'calling') return;
-    const p1 = match.player1.present;
-    const p2 = match.player2.present;
-    if (p1 && p2) return;
-    if (!p1 && !p2) return;
-    if (match.timerRunning) {
-      match.timerAccumulated += Date.now() - match.timerStartedAt;
-      match.timerRunning = false;
+    try {
+      if (!data || !data.id || typeof data.id !== 'string') return;
+      const match = state.matches.find(m => m.id === data.id);
+      if (!match || match.phase !== 'calling') return;
+      const p1 = match.player1.present;
+      const p2 = match.player2.present;
+      if (p1 && p2) return;
+      if (!p1 && !p2) return;
+      if (match.timerRunning) {
+        match.timerAccumulated += Date.now() - match.timerStartedAt;
+        match.timerRunning = false;
+      }
+      match.phase = 'decided';
+      match.winner = p1 ? 1 : 2;
+      match.forfeit = true;
+      broadcast();
+    } catch (err) {
+      console.error('❌ match:forfeit error:', err.message);
     }
-    match.phase = 'decided';
-    match.winner = p1 ? 1 : 2;
-    match.forfeit = true;
-    broadcast();
   });
 
   socket.on('match:toggleStream', (data) => {
-    const match = state.matches.find(m => m.id === data.id);
-    if (!match) return;
-    match.streaming = !match.streaming;
-    broadcast();
+    try {
+      if (!data || !data.id || typeof data.id !== 'string') return;
+      const match = state.matches.find(m => m.id === data.id);
+      if (!match) return;
+      match.streaming = !match.streaming;
+      broadcast();
+    } catch (err) {
+      console.error('❌ match:toggleStream error:', err.message);
+    }
   });
 
   socket.on('match:cancel', (data) => {
-    const match = state.matches.find(m => m.id === data.id);
+    const matchId = data && data.id;
+    if (!matchId || typeof matchId !== 'string') return;
+    const match = state.matches.find(m => m.id === matchId);
     if (!match) return;
-    if (state.settings.highlightMatchId === match.id) state.settings.highlightMatchId = null;
+    if (state.settings.highlightMatchId === matchId) state.settings.highlightMatchId = null;
     match.status = 'cancelled';
     match.cancelledAt = Date.now();
     broadcast();
     setTimeout(() => {
-      state.matches = state.matches.filter(m => m.id !== match.id);
-      broadcast();
+      // Safety guard: verify match still exists before removal
+      const stillExists = state.matches.some(m => m.id === matchId);
+      if (stillExists) {
+        state.matches = state.matches.filter(m => m.id !== matchId);
+        broadcast();
+      }
     }, 3000);
   });
 
   socket.on('match:restore', (data) => {
-    const hIdx = state.history.findIndex(h => h.id === data.id);
-    if (hIdx === -1) return;
-    const h = state.history[hIdx];
-    const match = {
-      id: genId(),
-      game: h.game,
-      player1: { name: h.player1, present: true },
-      player2: { name: h.player2, present: true },
-      score1: h.score1,
-      score2: h.score2,
-      status: 'active',
-      winner: null,
-      phase: 'playing',
-      timerRunning: false,
-      timerStartedAt: 0,
-      timerAccumulated: 0,
-      timerDuration: 120,
-      station: h.station || '',
-      round: h.round || '',
-      streaming: !!h.streaming,
-      order: state.matches.filter(m => m.status === 'active').length,
-      createdAt: Date.now(),
-    };
-    state.matches.push(match);
-    state.history.splice(hIdx, 1);
-    broadcast();
+    try {
+      if (!data || !data.id || typeof data.id !== 'string') return;
+      const hIdx = state.history.findIndex(h => h.id === data.id);
+      if (hIdx === -1) return;
+      const h = state.history[hIdx];
+      const match = {
+        id: genId(),
+        game: h.game,
+        player1: { name: h.player1, present: true },
+        player2: { name: h.player2, present: true },
+        score1: h.score1,
+        score2: h.score2,
+        status: 'active',
+        winner: null,
+        phase: 'playing',
+        timerRunning: false,
+        timerStartedAt: 0,
+        timerAccumulated: 0,
+        timerDuration: 120,
+        station: h.station || '',
+        round: h.round || '',
+        streaming: !!h.streaming,
+        order: state.matches.filter(m => m.status === 'active').length,
+        createdAt: Date.now(),
+      };
+      state.matches.unshift(match);
+      if (h.game && !state.games.includes(h.game)) {
+        state.games.push(h.game);
+      }
+      state.history.splice(hIdx, 1);
+      broadcast();
+    } catch (err) {
+      console.error('❌ match:restore error:', err.message);
+    }
   });
 
   // --- Timer ---
   socket.on('timer:start', (data) => {
-    const match = state.matches.find(m => m.id === data.id);
-    if (!match || match.timerRunning) return;
-    match.timerRunning = true;
-    match.timerStartedAt = Date.now();
-    broadcast();
+    try {
+      if (!data || !data.id || typeof data.id !== 'string') return;
+      const match = state.matches.find(m => m.id === data.id);
+      if (!match) return;
+      match.timerRunning = true;
+      match.timerStartedAt = Date.now();
+      broadcast();
+    } catch (err) {
+      console.error('❌ timer:start error:', err.message);
+    }
   });
 
   socket.on('timer:stop', (data) => {
-    const match = state.matches.find(m => m.id === data.id);
-    if (!match || !match.timerRunning) return;
-    match.timerAccumulated += Date.now() - match.timerStartedAt;
-    match.timerRunning = false;
-    broadcast();
+    try {
+      if (!data || !data.id || typeof data.id !== 'string') return;
+      const match = state.matches.find(m => m.id === data.id);
+      if (!match) return;
+      if (match.timerRunning) {
+        match.timerAccumulated += Date.now() - match.timerStartedAt;
+        match.timerRunning = false;
+      }
+      broadcast();
+    } catch (err) {
+      console.error('❌ timer:stop error:', err.message);
+    }
   });
 
   socket.on('timer:reset', (data) => {
-    const match = state.matches.find(m => m.id === data.id);
-    if (!match) return;
-    match.timerRunning = false;
-    match.timerStartedAt = 0;
-    match.timerAccumulated = 0;
-    broadcast();
+    try {
+      if (!data || !data.id || typeof data.id !== 'string') return;
+      const match = state.matches.find(m => m.id === data.id);
+      if (!match) return;
+      match.timerRunning = false;
+      match.timerStartedAt = 0;
+      match.timerAccumulated = 0;
+      broadcast();
+    } catch (err) {
+      console.error('❌ timer:reset error:', err.message);
+    }
   });
 
   // --- Settings ---
   socket.on('settings:layout', (data) => {
-    state.settings.layout = { rows: data.rows, cols: data.cols };
-    broadcast();
+    try {
+      if (!data || typeof data !== 'object') return;
+      const rows = parseInt(data.rows) || 2;
+      const cols = parseInt(data.cols) || 2;
+      if (rows >= 1 && rows <= 3 && cols >= 1 && cols <= 3) {
+        state.settings.layout = { rows, cols };
+        broadcast();
+      }
+    } catch (err) {
+      console.error('❌ settings:layout error:', err.message);
+    }
   });
 
   socket.on('settings:displayMode', (data) => {
-    state.settings.displayMode = data.mode;
-    broadcast();
+    try {
+      if (!data || !data.mode || typeof data.mode !== 'string') return;
+      if (['matches', 'waiting', 'bracket'].includes(data.mode)) {
+        state.settings.displayMode = data.mode;
+        broadcast();
+      }
+    } catch (err) {
+      console.error('❌ settings:displayMode error:', err.message);
+    }
   });
 
   socket.on('settings:highlight', (data) => {
-    const matchId = data.matchId || null;
-    if (matchId && !state.matches.find(m => m.id === matchId)) return;
-    state.settings.highlightMatchId = matchId;
-    broadcast();
+    try {
+      const matchId = (data && data.matchId) || null;
+      if (matchId && (typeof matchId !== 'string' || !state.matches.find(m => m.id === matchId))) return;
+      state.settings.highlightMatchId = matchId;
+      broadcast();
+    } catch (err) {
+      console.error('❌ settings:highlight error:', err.message);
+    }
   });
 
   socket.on('settings:sncfBlue', (data) => {
-    state.settings.sncfBlueMode = !!data.enabled;
-    broadcast();
+    try {
+      state.settings.sncfBlueMode = !!(data && data.enabled);
+      broadcast();
+    } catch (err) {
+      console.error('❌ settings:sncfBlue error:', err.message);
+    }
   });
 
   socket.on('settings:avatarSize', (data) => {
-    const size = parseInt(data);
-    if (!isNaN(size) && size >= 0 && size <= 80) {
-      state.settings.avatarSize = size;
+    try {
+      const size = parseInt(data);
+      if (!isNaN(size) && size >= 0 && size <= 80) {
+        state.settings.avatarSize = size;
+      }
+      broadcast();
+    } catch (err) {
+      console.error('❌ settings:avatarSize error:', err.message);
     }
-    broadcast();
   });
 
   socket.on('settings:accentColor', (data) => {
-    const hex = (data || '').trim();
-    if (/^#[0-9a-fA-F]{6}$/.test(hex)) {
-      state.settings.accentColor = hex;
-      broadcast();
+    try {
+      const hex = (data || '').trim();
+      if (/^#[0-9a-fA-F]{6}$/.test(hex)) {
+        state.settings.accentColor = hex;
+        broadcast();
+      }
+    } catch (err) {
+      console.error('❌ settings:accentColor error:', err.message);
     }
   });
 
   socket.on('settings:fontFamily', (data) => {
-    const font = (data || '').trim();
-    if (FONT_WHITELIST.includes(font)) {
-      state.settings.fontFamily = font;
-      broadcast();
+    try {
+      const font = (data || '').trim();
+      if (FONT_WHITELIST.includes(font)) {
+        state.settings.fontFamily = font;
+        broadcast();
+      }
+    } catch (err) {
+      console.error('❌ settings:fontFamily error:', err.message);
     }
   });
 
   socket.on('settings:autoRotation', (data) => {
-    if (typeof data !== 'object' || !data) return;
-    const modes = ['matches', 'waiting', 'bracket'];
-    for (const mode of modes) {
-      if (data[mode] !== undefined) {
-        const seconds = parseInt(data[mode]);
-        if (!isNaN(seconds) && seconds >= 0 && seconds <= 300) {
-          state.settings.autoRotation[mode] = seconds;
+    try {
+      if (typeof data !== 'object' || !data) return;
+      const modes = ['matches', 'waiting', 'bracket'];
+      for (const mode of modes) {
+        if (data[mode] !== undefined) {
+          const seconds = parseInt(data[mode]);
+          if (!isNaN(seconds) && seconds >= 0 && seconds <= 300) {
+            state.settings.autoRotation[mode] = seconds;
+          }
         }
       }
+      broadcast();
+    } catch (err) {
+      console.error('❌ settings:autoRotation error:', err.message);
     }
-    broadcast();
   });
 
   socket.on('settings:rotationEnabled', (data) => {
-    state.settings.rotationEnabled = !!data;
-    broadcast();
+    try {
+      state.settings.rotationEnabled = !!data;
+      broadcast();
+    } catch (err) {
+      console.error('❌ settings:rotationEnabled error:', err.message);
+    }
   });
 
   socket.on('settings:autoSaveInterval', (data) => {
-    const seconds = parseInt(data);
-    if (!isNaN(seconds) && seconds >= 10 && seconds <= 600) {
-      state.settings.autoSaveInterval = seconds;
-      restartAutoSave();
-      broadcast();
+    try {
+      const seconds = parseInt(data);
+      if (!isNaN(seconds) && seconds >= 10 && seconds <= 600) {
+        state.settings.autoSaveInterval = seconds;
+        restartAutoSave();
+        broadcast();
+      }
+    } catch (err) {
+      console.error('❌ settings:autoSaveInterval error:', err.message);
     }
   });
 
   socket.on('games:updateSettings', (data) => {
-    const name = (data.name || '').trim();
-    if (!name || !state.games.includes(name)) return;
-    const gs = state.gameSettings[name] || {};
-    if (data.color !== undefined) {
-      gs.color = /^#[0-9a-fA-F]{6}$/.test(data.color) ? data.color : '';
+    try {
+      if (!data || typeof data !== 'object') return;
+      const name = (data.name || '').trim();
+      if (!name || !state.games.includes(name)) return;
+      const gs = state.gameSettings[name] || {};
+      if (data.color !== undefined) {
+        gs.color = /^#[0-9a-fA-F]{6}$/.test(data.color) ? data.color : '';
+      }
+      if (data.image !== undefined) {
+        gs.image = (data.image && data.image.length < 2000000 && /^data:image\/(png|jpe?g|gif|webp);/.test(data.image)) ? data.image : '';
+      }
+      if (data.imageOpacity !== undefined) {
+        gs.imageOpacity = Math.max(0, Math.min(1, parseFloat(data.imageOpacity) || 0.3));
+      }
+      state.gameSettings[name] = gs;
+      if (data.image !== undefined) scheduleAvatarPrune();
+      broadcast();
+    } catch (err) {
+      console.error('❌ games:updateSettings error:', err.message);
     }
-    if (data.image !== undefined) {
-      gs.image = (data.image && data.image.length < 2000000 && /^data:image\/(png|jpe?g|gif|webp);/.test(data.image)) ? data.image : '';
-    }
-    if (data.imageOpacity !== undefined) {
-      gs.imageOpacity = Math.max(0, Math.min(1, parseFloat(data.imageOpacity) || 0.3));
-    }
-    state.gameSettings[name] = gs;
-    if (data.image !== undefined) scheduleAvatarPrune();
-    broadcast();
   });
 
   socket.on('settings:font', (data) => {
@@ -1070,8 +1253,8 @@ io.on('connection', (socket) => {
       // Restore state but reset runtime properties
       state.matches = (backupData.matches || []).map(normalizeRestoredMatch);
       state.history = backupData.history || [];
-      state.settings = backupData.settings || state.settings;
-      state.bracket = backupData.bracket || state.bracket;
+      state.settings = applySettingsDefaults(backupData.settings);
+      state.bracket = applyBracketDefaults(backupData.bracket);
       state.startgg = backupData.startgg || state.startgg;
       state.games = backupData.games || [];
       state.players = backupData.players || [];
@@ -1225,37 +1408,44 @@ io.on('connection', (socket) => {
     bracketRounds.push([
       { id: genId(), player1: '?', player2: '?', score1: 0, score2: 0, winner: null },
     ]);
-    state.bracket = { rounds: bracketRounds, name: 'Bracket Principal' };
+    state.bracket = { rounds: bracketRounds, name: 'Bracket Principal', autoTournament: false };
 
     broadcast();
   });
 
   // --- Data Reset ---
   socket.on('data:reset', (data) => {
-    const validTargets = ['all', 'matches', 'history', 'bracket', 'games', 'players'];
-    const target = data && data.target;
-    if (!target || !validTargets.includes(target)) return;
+    try {
+      const validTargets = ['all', 'matches', 'history', 'bracket', 'games', 'players'];
+      const target = data && data.target;
+      if (!target || !validTargets.includes(target)) return;
 
-    if (target === 'all' || target === 'matches') {
-      state.matches = [];
+      if (target === 'all' || target === 'matches') {
+        state.matches = [];
+      }
+      if (target === 'all' || target === 'history') {
+        state.history = [];
+      }
+      if (target === 'all' || target === 'bracket') {
+        state.bracket = { ...DEFAULT_BRACKET };
+      }
+      if (target === 'all' || target === 'games') {
+        state.games = [];
+        state.gameSettings = {};
+      }
+      if (target === 'all' || target === 'players') {
+        state.players = [];
+      }
+      if (target === 'all') {
+        state.settings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
+        state.startgg = { apiKey: '', tournamentSlug: '' };
+      }
+      broadcast();
+      scheduleAutoSave(true);
+      console.log('✅ État réinitialisé:', target);
+    } catch (err) {
+      console.error('❌ data:reset error:', err.message);
     }
-    if (target === 'all' || target === 'history') {
-      state.history = [];
-    }
-    if (target === 'all' || target === 'bracket') {
-      state.bracket = { rounds: [], name: '' };
-    }
-    if (target === 'all' || target === 'games') {
-      state.games = [];
-      state.gameSettings = {};
-    }
-    if (target === 'all' || target === 'players') {
-      state.players = [];
-    }
-    if (target === 'all') {
-      state.startgg = { apiKey: '', tournamentSlug: '' };
-    }
-    broadcast();
   });
 
   // --- History ---

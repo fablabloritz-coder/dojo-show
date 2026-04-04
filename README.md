@@ -13,6 +13,7 @@ Orchestrateur de tournoi temps réel pour événements gaming — matchs, bracke
 ## Fonctionnalités
 
 ### Gestion des matchs
+
 - Création de matchs (jeu, joueurs, poste, streaming, round)
 - Cycle complet : **en attente → appel → en cours → terminé**
 - Timer bidirectionnel (compte à rebours en appel, chronomètre en jeu)
@@ -20,6 +21,7 @@ Orchestrateur de tournoi temps réel pour événements gaming — matchs, bracke
 - Undo du vainqueur, annulation, restauration depuis l'historique
 
 ### Affichage spectateur (1920×1080)
+
 - **Grille de matchs** : layouts de 1×1 à 3×3, mise à l'échelle automatique des polices
 - **Tableau d'attente (SNCF)** : file d'attente style gare avec images de jeu en fond
 - **Bracket** : arbre de tournoi éliminatoire
@@ -31,6 +33,7 @@ Orchestrateur de tournoi temps réel pour événements gaming — matchs, bracke
 - Avatars joueurs
 
 ### Administration
+
 - Interface complète de gestion des matchs, joueurs et jeux
 - Édition des scores live avec raccourcis (+1 / -1)
 - Regroupement des matchs par jeu (accordéon)
@@ -38,6 +41,7 @@ Orchestrateur de tournoi temps réel pour événements gaming — matchs, bracke
 - Données de test intégrées pour les démos
 
 ### Paramètres
+
 - 8 polices Google Fonts au choix (Inter, Roboto, Poppins, Montserrat, Orbitron, Press Start 2P, Raleway, Oswald)
 - Profils de taille de police par disposition (1×1 à 3×3)
 - Couleur d'accent globale
@@ -46,11 +50,12 @@ Orchestrateur de tournoi temps réel pour événements gaming — matchs, bracke
 - Configuration Start.gg (clé API, slug tournoi)
 
 ### Start.gg (import avancé)
+
 - Connexion via API GraphQL Start.gg (token requis)
-- Import segmenté en **3 étapes indépendantes**:
-    - Étape 1: import des jeux (avec images)
-    - Étape 2: import paginé des joueurs par événement/jeu
-    - Étape 3: import des avatars joueurs séparé (plus lent)
+- Import segmenté en **3 étapes indépendantes** :
+  - Étape 1 : import des jeux (avec images)
+  - Étape 2 : import paginé des joueurs par événement/jeu
+  - Étape 3 : import des avatars joueurs séparé (plus lent)
 - Filtrage par jeu pour les étapes joueurs et avatars
 - Journal d'import en temps réel + barres de progression
 - Gestion des gros tournois via pagination (réduction des erreurs de complexité)
@@ -61,7 +66,7 @@ Orchestrateur de tournoi temps réel pour événements gaming — matchs, bracke
 ## Stack technique
 
 | Composant | Technologie |
-|-----------|-------------|
+| --------- | ----------- |
 | Backend | Node.js, Express, Socket.IO |
 | Frontend | HTML / CSS / JS vanilla |
 | Persistance | JSON (`data/state.json`), auto-save 30s |
@@ -83,11 +88,12 @@ npm install
 npm start
 ```
 
-Le serveur démarre sur **http://localhost:3000**.
+Le serveur démarre sur [`http://localhost:3000`](http://localhost:3000).
 
 ### Sous Windows
 
-Double-cliquer sur `start.bat` pour un lanceur interactif avec:
+Double-cliquer sur `start.bat` pour un lanceur interactif avec :
+
 - choix du navigateur (Chrome, Edge, Firefox, défaut)
 - ouverture en mode app pour Chrome/Edge
 - attente active du démarrage serveur avant ouverture du navigateur
@@ -98,7 +104,7 @@ Double-cliquer sur `start.bat` pour un lanceur interactif avec:
 ## Interfaces
 
 | URL | Rôle |
-|-----|------|
+| --- | ---- |
 | `/admin.html` | Interface organisateur — gestion des matchs, scores, joueurs |
 | `/display.html` | Affichage spectateur — plein écran 1920×1080 |
 | `/settings.html` | Paramètres — polices, couleurs, jeux, Start.gg |
@@ -107,7 +113,7 @@ Double-cliquer sur `start.bat` pour un lanceur interactif avec:
 
 ## Structure du projet
 
-```
+```tree
 ├── server.js              # Backend complet : state, Socket.IO, persistence, API proxy
 ├── package.json
 ├── start.bat              # Lanceur Windows avec choix navigateur
