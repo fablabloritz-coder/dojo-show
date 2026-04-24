@@ -1197,3 +1197,141 @@ body {
   height: 18px;
   margin-right: 4px;
 }
+
+/* ─── RESPONSIVE ─────────────────────────── */
+@media (max-width: 1366px), (max-height: 820px) {
+  .main-layout {
+    grid-template-columns: 240px 1fr 260px;
+  }
+
+  .game-group-content {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .topbar {
+    gap: 8px;
+  }
+
+  .topbar-center {
+    gap: 6px;
+  }
+}
+
+@media (max-width: 1100px) {
+  body {
+    overflow-y: auto;
+    overflow-x: hidden;
+    height: auto;
+    min-height: 100vh;
+  }
+
+  .topbar {
+    height: auto;
+    min-height: 52px;
+    padding: 8px 10px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    position: sticky;
+    top: 0;
+  }
+
+  .topbar-center,
+  .topbar-right {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .separator {
+    display: none;
+  }
+
+  .main-layout {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+
+  .panel-left,
+  .panel-center,
+  .panel-right {
+    border: none;
+    border-bottom: 1px solid var(--border-color);
+    min-height: 0;
+  }
+
+  .panel-center {
+    order: 1;
+  }
+
+  .panel-right {
+    order: 2;
+  }
+
+  .panel-left {
+    order: 3;
+  }
+
+  .game-group-content {
+    grid-template-columns: 1fr;
+  }
+
+  .preview-section {
+    display: none;
+  }
+
+  .match-actions .btn,
+  .queue-actions .btn,
+  .score-btn {
+    opacity: 1;
+  }
+
+  .modal,
+  .modal-large {
+    width: min(96vw, 760px);
+  }
+}
+
+@media (max-width: 700px) {
+  .logo {
+    font-size: 15px;
+  }
+
+  .btn {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  .layout-selector,
+  .display-mode-selector {
+    flex-wrap: wrap;
+  }
+
+  .center-header {
+    margin-bottom: 10px;
+  }
+
+  .section-title {
+    font-size: 14px;
+  }
+
+  .panel-center,
+  .panel-left,
+  .queue-section,
+  .history-section {
+    padding: 10px;
+  }
+
+  .form-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .queue-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .queue-actions {
+    justify-content: flex-end;
+  }
+}

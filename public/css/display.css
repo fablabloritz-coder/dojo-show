@@ -25,18 +25,30 @@
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
+html,
+body {
+  width: 100%;
+  height: 100%;
+}
 body {
   font-family: 'Inter', sans-serif;
   background: var(--bg-dark);
   color: var(--text-light);
-  width: 1920px;
-  height: 1080px;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   overflow: hidden;
 }
 #displayRoot {
-  width: 1920px;
-  height: 1080px;
+  width: min(100vw, calc(100dvh * 16 / 9));
+  max-width: 100vw;
+  max-height: 100dvh;
+  aspect-ratio: 16 / 9;
+  height: auto;
   position: relative;
+  overflow: hidden;
 }
 
 /* ─── VIEWS ──────────────────────────────── */
@@ -393,6 +405,11 @@ body {
   border-collapse: collapse;
   flex: 1;
 }
+
+.sncf-table-wrap {
+  flex: 1;
+  overflow: auto;
+}
 .sncf-table thead {
   background: var(--card-purple);
 }
@@ -740,3 +757,87 @@ body {
 /* ─── BRACKET BYE DISPLAY ────────────────── */
 .bmc-name.bye { color: #555; font-style: italic; }
 .bmc-score.hidden { visibility: hidden; }
+
+/* ─── RESPONSIVE ─────────────────────────── */
+@media (max-width: 1100px), (max-height: 760px) {
+  .match-grid {
+    padding: 10px;
+    gap: 8px;
+  }
+
+  .display-match-card {
+    padding: 10px;
+    border-radius: 10px;
+  }
+
+  .dmc-overlay span {
+    font-size: 1.4em;
+    letter-spacing: 2px;
+    padding: 6px 12px;
+  }
+
+  .sncf-header {
+    padding: 10px 14px;
+  }
+
+  .sncf-logo {
+    font-size: 16px;
+    letter-spacing: 1px;
+  }
+
+  .sncf-title {
+    font-size: 14px;
+    letter-spacing: 1px;
+  }
+
+  .sncf-clock {
+    font-size: 18px;
+  }
+
+  .sncf-table {
+    min-width: 760px;
+  }
+
+  .sncf-table th,
+  .sncf-table td {
+    padding: 8px 10px;
+  }
+
+  .bracket-header,
+  .bracket-container {
+    padding: 10px 12px;
+  }
+
+  .bracket-round {
+    min-width: 160px;
+    padding: 0 6px;
+  }
+
+  .bracket-match-card {
+    min-width: 140px;
+    padding: 6px 8px;
+  }
+}
+
+@media (max-width: 700px) {
+  .dmc-station,
+  .dmc-twitch,
+  .dmc-tournament {
+    top: 6px;
+    font-size: 9px;
+    padding: 2px 5px;
+  }
+
+  .dmc-twitch {
+    left: 8px;
+  }
+
+  .dmc-station,
+  .dmc-tournament {
+    right: 8px;
+  }
+
+  .mode-indicator {
+    display: none !important;
+  }
+}

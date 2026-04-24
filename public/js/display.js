@@ -17,6 +17,7 @@ let autoRotationTimer = null;
 let localDisplayMode = null;
 let rotationStartTime = 0;
 let rotationProgressTimer = null;
+let viewportScale = 1;
 const DISPLAY_MODES = ['matches', 'waiting', 'bracket'];
 
 let DEFAULT_AVATAR = 'data:image/svg+xml;base64,' + btoa('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80"><rect width="80" height="80" rx="40" fill="#7b2ff7"/><text x="40" y="52" text-anchor="middle" fill="white" font-size="32" font-family="sans-serif">?</text></svg>');
@@ -95,6 +96,7 @@ function renderMatches() {
   const grid = document.getElementById('matchGrid');
   const highlightId = state.settings.highlightMatchId;
   const activeMatches = state.matches.filter(m => m.status === 'active' || m.status === 'cancelled');
+  const viewportFactor = viewportScale;
 
   // Spotlight mode: single match in 1×1
   if (highlightId) {
@@ -106,11 +108,11 @@ function renderMatches() {
       grid.style.gridTemplateColumns = '1fr';
       grid.classList.remove('density-high', 'density-medium');
 
-      const titleSize = Math.max(12, Math.round((fp.matchTitle || 20) * scale));
-      const nameSize = Math.max(14, Math.round((fp.playerName || 22) * scale));
-      const scoreSize = Math.max(20, Math.round((fp.score || 42) * scale));
-      const timerSize = Math.max(10, Math.round((fp.timer || 16) * scale));
-      const avSize = Math.max(0, Math.round((state.settings.avatarSize || 0) * scale));
+      const titleSize = Math.max(10, Math.round((fp.matchTitle || 20) * scale * viewportFactor));
+      const nameSize = Math.max(12, Math.round((fp.playerName || 22) * scale * viewportFactor));
+      const scoreSize = Math.max(16, Math.round((fp.score || 42) * scale * viewportFactor));
+      const timerSize = Math.max(9, Math.round((fp.timer || 16) * scale * viewportFactor));
+      const avSize = Math.max(0, Math.round((state.settings.avatarSize || 0) * scale * viewportFactor));
 
       grid.innerHTML = renderSingleMatchCard(hm, titleSize, nameSize, scoreSize, timerSize, avSize, false);
       return;
@@ -140,11 +142,11 @@ function renderMatches() {
   const shown = activeMatches.slice(0, maxShow);
 
   // Compute scaled font sizes (fontProfile values as base, scale by density, with floor)
-  const titleSize = Math.max(12, Math.round((fp.matchTitle || 20) * scale));
-  const nameSize = Math.max(14, Math.round((fp.playerName || 22) * scale));
-  const scoreSize = Math.max(20, Math.round((fp.score || 42) * scale));
-  const timerSize = Math.max(10, Math.round((fp.timer || 16) * scale));
-  const avSize = Math.max(0, Math.round((state.settings.avatarSize || 0) * scale));
+  const titleSize = Math.max(10, Math.round((fp.matchTitle || 20) * scale * viewportFactor));
+  const nameSize = Math.max(12, Math.round((fp.playerName || 22) * scale * viewportFactor));
+  const scoreSize = Math.max(16, Math.round((fp.score || 42) * scale * viewportFactor));
+  const timerSize = Math.max(9, Math.round((fp.timer || 16) * scale * viewportFactor));
+  const avSize = Math.max(0, Math.round((state.settings.avatarSize || 0) * scale * viewportFactor));
 
   grid.innerHTML = shown.map((m, i) => renderSingleMatchCard(m, titleSize, nameSize, scoreSize, timerSize, avSize, i % 2 === 1)).join('');
 }
@@ -224,11 +226,11 @@ function renderWaiting(newIds = []) {
   const waiting = state.matches.filter(m => m.status === 'waiting');
   const key = `${state.settings.layout.rows}x${state.settings.layout.cols}`;
   const fp = state.settings.fontProfiles[key] || {};
-  const rowSize = fp.sncfRow || 16;
-  const gameSize = fp.sncfGame || 13;
-  const statusSize = fp.sncfStatus || 12;
-  const headerSize = fp.sncfHeader || 18;
-  const avSize = Math.round((state.settings.avatarSize || 0) * 0.7);
+  const rowSize = Math.max(10, Math.round((fp.sncfRow || 16) * viewportScale));
+  const gameSize = Math.max(9, Math.round((fp.sncfGame || 13) * viewportScale));
+  const statusSize = Math.max(9, Math.round((fp.sncfStatus || 12) * viewportScale));
+  const headerSize = Math.max(11, Math.round((fp.sncfHeader || 18) * viewportScale));
+  const avSize = Math.max(0, Math.round((state.settings.avatarSize || 0) * 0.7 * viewportScale));
 
   // Apply header font size
   const ths = document.querySelectorAll('.sncf-table thead th');
@@ -266,11 +268,11 @@ function renderBracket() {
   const titleEl = document.getElementById('bracketTitle');
   const key = `${state.settings.layout.rows}x${state.settings.layout.cols}`;
   const fp = state.settings.fontProfiles[key] || {};
-  const titleSize = fp.bracketTitle || 24;
-  const nameSize = fp.bracketName || 14;
-  const scoreSize = fp.bracketScore || 14;
-  const roundSize = fp.bracketRound || 13;
-  const avSize = Math.round((state.settings.avatarSize || 0) * 0.5);
+  const titleSize = Math.max(14, Math.round((fp.bracketTitle || 24) * viewportScale));
+  const nameSize = Math.max(10, Math.round((fp.bracketName || 14) * viewportScale));
+  const scoreSize = Math.max(10, Math.round((fp.bracketScore || 14) * viewportScale));
+  const roundSize = Math.max(10, Math.round((fp.bracketRound || 13) * viewportScale));
+  const avSize = Math.max(0, Math.round((state.settings.avatarSize || 0) * 0.5 * viewportScale));
 
   if (!state.bracket || !state.bracket.rounds || state.bracket.rounds.length === 0) {
     container.innerHTML = '<div class="display-empty">AUCUN BRACKET CONFIGURÉ</div>';
@@ -490,3 +492,18 @@ function updateModeIndicator() {
     </div>`;
   }).join('');
 }
+
+function updateViewportScale() {
+  const widthScale = window.innerWidth / 1920;
+  const heightScale = window.innerHeight / 1080;
+  viewportScale = Math.max(0.5, Math.min(1, widthScale, heightScale));
+  document.documentElement.style.setProperty('--display-scale', String(viewportScale));
+}
+
+window.addEventListener('resize', () => {
+  updateViewportScale();
+  render();
+  updateModeIndicator();
+});
+
+updateViewportScale();
