@@ -1458,14 +1458,42 @@ body.mobile-simplified .game-group-content {
 }
 
 body.mobile-simplified .match-round,
-body.mobile-simplified .match-station,
-body.mobile-simplified .history-section {
+body.mobile-simplified .match-station {
   display: none;
 }
 
 body.mobile-simplified .queue-section {
   max-height: none;
   border-bottom: none;
+}
+
+body.mobile-simplified .history-section {
+  display: flex;
+  padding-top: 8px;
+}
+
+body.mobile-simplified .history-header {
+  margin-bottom: 6px;
+}
+
+body.mobile-simplified .history-list {
+  gap: 4px;
+}
+
+body.mobile-simplified .history-item {
+  padding: 5px 8px;
+  font-size: 11px;
+}
+
+body.mobile-simplified .history-time,
+body.mobile-simplified .history-vs,
+body.mobile-simplified .history-item .game-tag,
+body.mobile-simplified .history-item .score {
+  font-size: 10px;
+}
+
+body.mobile-simplified .history-meta {
+  margin-top: 2px;
 }
 
 body.mobile-simplified .match-actions .btn,
