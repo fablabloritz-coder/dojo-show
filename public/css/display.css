@@ -841,3 +841,42 @@ body {
     display: none !important;
   }
 }
+
+/* ─── MOBILE SIMPLIFIED MODE ────────────── */
+body.mobile-simplified .dmc-round,
+body.mobile-simplified .dmc-station,
+body.mobile-simplified .mode-indicator {
+  display: none !important;
+}
+
+body.mobile-simplified .match-grid {
+  padding: 8px;
+  gap: 6px;
+}
+
+body.mobile-simplified .display-match-card {
+  padding: 8px;
+  border-radius: 10px;
+}
+
+body.mobile-simplified .sncf-header {
+  padding: 8px 10px;
+}
+
+body.mobile-simplified .sncf-logo {
+  font-size: 14px;
+}
+
+body.mobile-simplified .sncf-title {
+  font-size: 12px;
+  letter-spacing: 1px;
+}
+
+body.mobile-simplified .sncf-clock {
+  font-size: 16px;
+}
+
+body.mobile-simplified .bracket-header,
+body.mobile-simplified .bracket-container {
+  padding: 8px;
+}

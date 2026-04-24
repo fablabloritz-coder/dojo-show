@@ -16,6 +16,67 @@ let state = {
 let lastSyncTime = Date.now();
 let timerInterval = null;
 let collapsedGames = {};
+const MOBILE_SIMPLIFIED_KEY = 'dojo.mobileSimplified';
+
+function getMobileSimplifiedPreference() {
+  const pref = localStorage.getItem(MOBILE_SIMPLIFIED_KEY);
+  if (pref === 'on' || pref === 'off') return pref;
+  return null;
+}
+
+function isSmallViewport() {
+  return window.matchMedia('(max-width: 900px), (max-height: 720px)').matches;
+}
+
+function isMobileSimplifiedEnabled() {
+  const pref = getMobileSimplifiedPreference();
+  if (pref === 'on') return true;
+  if (pref === 'off') return false;
+  return isSmallViewport();
+}
+
+function updateMobileModeButton() {
+  const btn = document.getElementById('btnMobileSimplified');
+  const badge = document.getElementById('mobileModeBadge');
+  if (!btn) return;
+  const pref = getMobileSimplifiedPreference();
+  const enabled = isMobileSimplifiedEnabled();
+  const mode = pref || 'auto';
+  const modeLabel = mode === 'on' ? 'Forcé' : mode === 'off' ? 'Off' : 'Auto';
+  btn.textContent = `📱 Mode simplifié: ${modeLabel}`;
+  btn.classList.toggle('on', enabled);
+  btn.classList.toggle('off', !enabled);
+  btn.classList.toggle('auto', mode === 'auto');
+
+  if (badge) {
+    const sourceLabel = mode === 'auto' ? 'Auto' : (mode === 'on' ? 'Forcé' : 'Off');
+    const stateLabel = enabled ? 'actif' : 'inactif';
+    badge.textContent = `Mode simplifié: ${stateLabel} (${sourceLabel})`;
+    badge.classList.toggle('active', enabled);
+    badge.classList.toggle('inactive', !enabled);
+  }
+}
+
+function applyMobileSimplifiedMode() {
+  const enabled = isMobileSimplifiedEnabled();
+  document.body.classList.toggle('mobile-simplified', enabled);
+  updateMobileModeButton();
+}
+
+function toggleMobileSimplifiedMode() {
+  const current = getMobileSimplifiedPreference();
+  // Cycle: auto -> on -> off -> auto
+  if (current === null) {
+    localStorage.setItem(MOBILE_SIMPLIFIED_KEY, 'on');
+  } else if (current === 'on') {
+    localStorage.setItem(MOBILE_SIMPLIFIED_KEY, 'off');
+  } else {
+    localStorage.removeItem(MOBILE_SIMPLIFIED_KEY);
+  }
+  applyMobileSimplifiedMode();
+  scalePreview();
+  render();
+}
 
 // ─── SOCKET ─────────────────────────────────────────────
 const socket = io();
@@ -59,6 +120,7 @@ function gameColorStyle(gameName) {
 }
 
 function render() {
+  applyMobileSimplifiedMode();
   renderMatches();
   renderQueue();
   renderHistory();
@@ -378,7 +440,12 @@ function scalePreview() {
   container.style.height = `${1080 * scale}px`;
 }
 
-window.addEventListener('resize', scalePreview);
+window.addEventListener('resize', () => {
+  if (getMobileSimplifiedPreference() === null) {
+    applyMobileSimplifiedMode();
+  }
+  scalePreview();
+});
 
 // ─── ACTIONS ────────────────────────────────────────────
 function togglePresence(matchId, player) {
@@ -939,6 +1006,7 @@ socket.on('bracket:syncCompleted', (data) => {
 // (updateTournamentUI is now called directly in the render function above)
 // ─── INIT ───────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+  applyMobileSimplifiedMode();
   startTimerLoop();
   setTimeout(scalePreview, 200);
   initAutocompletes();

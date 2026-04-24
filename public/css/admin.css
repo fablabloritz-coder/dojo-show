@@ -52,6 +52,28 @@ body {
 .topbar-left { display: flex; align-items: center; gap: 12px; }
 .topbar-center { display: flex; align-items: center; gap: 8px; flex: 1; justify-content: center; }
 .topbar-right { display: flex; align-items: center; gap: 10px; }
+.mobile-mode-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.mobile-mode-badge.active {
+  color: #d8ffd8;
+  border-color: rgba(0, 200, 83, 0.6);
+  background: rgba(0, 200, 83, 0.15);
+}
+.mobile-mode-badge.inactive {
+  color: var(--text-muted);
+  border-color: var(--border-color);
+  background: rgba(255, 255, 255, 0.03);
+}
 .logo {
   font-size: 18px;
   font-weight: 800;
@@ -1321,6 +1343,11 @@ body {
     padding: 10px;
   }
 
+  .mobile-mode-badge {
+    width: 100%;
+    justify-content: center;
+  }
+
   .form-row {
     grid-template-columns: 1fr;
     gap: 8px;
@@ -1333,5 +1360,90 @@ body {
 
   .queue-actions {
     justify-content: flex-end;
+  }
+}
+
+/* ─── MOBILE SIMPLIFIED MODE ────────────── */
+.btn-mobile-mode.on {
+  border-color: var(--purple-primary);
+  color: var(--text-primary);
+  box-shadow: 0 0 0 1px var(--purple-glow) inset;
+}
+
+body.mobile-simplified .main-layout {
+  grid-template-columns: 1fr 300px;
+}
+
+body.mobile-simplified .panel-left {
+  display: none;
+}
+
+body.mobile-simplified .panel-center {
+  padding: 10px;
+}
+
+body.mobile-simplified .panel-right {
+  border-left: 1px solid var(--border-color);
+}
+
+body.mobile-simplified .game-group-content {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+body.mobile-simplified .match-round,
+body.mobile-simplified .match-station,
+body.mobile-simplified .history-section {
+  display: none;
+}
+
+body.mobile-simplified .queue-section {
+  max-height: none;
+  border-bottom: none;
+}
+
+body.mobile-simplified .match-actions .btn,
+body.mobile-simplified .queue-actions .btn,
+body.mobile-simplified .score-btn,
+body.mobile-simplified .btn-presence {
+  opacity: 1;
+}
+
+body.mobile-simplified .match-actions .btn,
+body.mobile-simplified .queue-actions .btn {
+  min-height: 34px;
+  font-size: 12px;
+}
+
+@media (max-width: 1200px), (max-height: 760px) {
+  body.mobile-simplified {
+    overflow-y: auto;
+    overflow-x: hidden;
+    height: auto;
+  }
+
+  body.mobile-simplified .topbar {
+    height: auto;
+    min-height: 52px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    position: sticky;
+    top: 0;
+  }
+
+  body.mobile-simplified .topbar-center,
+  body.mobile-simplified .topbar-right {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  body.mobile-simplified .main-layout {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+
+  body.mobile-simplified .panel-right {
+    border-left: none;
+    border-top: 1px solid var(--border-color);
   }
 }

@@ -8,6 +8,24 @@ let state = {
   startgg: { apiKey: '', tournamentSlug: '' },
   gameSettings: {},
 };
+const MOBILE_SIMPLIFIED_KEY = 'dojo.mobileSimplified';
+
+function getMobileSimplifiedPreference() {
+  const pref = localStorage.getItem(MOBILE_SIMPLIFIED_KEY);
+  if (pref === 'on' || pref === 'off') return pref;
+  return null;
+}
+
+function isSettingsMobileSimplifiedEnabled() {
+  const pref = getMobileSimplifiedPreference();
+  if (pref === 'on') return true;
+  if (pref === 'off') return false;
+  return window.matchMedia('(max-width: 900px), (max-height: 720px)').matches;
+}
+
+function applySettingsMobileSimplifiedMode() {
+  document.body.classList.toggle('mobile-simplified', isSettingsMobileSimplifiedEnabled());
+}
 
 // ─── SOCKET ─────────────────────────────────────────────
 const socket = io();
@@ -25,6 +43,7 @@ socket.on('state:full', (newState) => {
   loadFontFamily();
   loadAutoRotation();
   loadAutoSave();
+  applySettingsMobileSimplifiedMode();
 });
 
 socket.on('connect', () => {
@@ -875,3 +894,11 @@ function escAttr(str) {
   if (!str) return '';
   return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
+
+window.addEventListener('resize', () => {
+  if (getMobileSimplifiedPreference() === null) {
+    applySettingsMobileSimplifiedMode();
+  }
+});
+
+applySettingsMobileSimplifiedMode();

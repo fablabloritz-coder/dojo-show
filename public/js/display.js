@@ -18,7 +18,25 @@ let localDisplayMode = null;
 let rotationStartTime = 0;
 let rotationProgressTimer = null;
 let viewportScale = 1;
+const MOBILE_SIMPLIFIED_KEY = 'dojo.mobileSimplified';
 const DISPLAY_MODES = ['matches', 'waiting', 'bracket'];
+
+function getMobileSimplifiedPreference() {
+  const pref = localStorage.getItem(MOBILE_SIMPLIFIED_KEY);
+  if (pref === 'on' || pref === 'off') return pref;
+  return null;
+}
+
+function isDisplayMobileSimplifiedEnabled() {
+  const pref = getMobileSimplifiedPreference();
+  if (pref === 'on') return true;
+  if (pref === 'off') return false;
+  return window.matchMedia('(max-width: 900px), (max-height: 720px)').matches;
+}
+
+function applyDisplayMobileSimplifiedMode() {
+  document.body.classList.toggle('mobile-simplified', isDisplayMobileSimplifiedEnabled());
+}
 
 let DEFAULT_AVATAR = 'data:image/svg+xml;base64,' + btoa('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80"><rect width="80" height="80" rx="40" fill="#7b2ff7"/><text x="40" y="52" text-anchor="middle" fill="white" font-size="32" font-family="sans-serif">?</text></svg>');
 
@@ -501,9 +519,13 @@ function updateViewportScale() {
 }
 
 window.addEventListener('resize', () => {
+  if (getMobileSimplifiedPreference() === null) {
+    applyDisplayMobileSimplifiedMode();
+  }
   updateViewportScale();
   render();
   updateModeIndicator();
 });
 
+applyDisplayMobileSimplifiedMode();
 updateViewportScale();

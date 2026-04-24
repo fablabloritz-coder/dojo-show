@@ -1018,3 +1018,29 @@ body {
     overflow-y: auto;
   }
 }
+
+/* ─── MOBILE SIMPLIFIED MODE ────────────── */
+body.mobile-simplified .help-text,
+body.mobile-simplified .color-preview-cards,
+body.mobile-simplified .info-box {
+  display: none;
+}
+
+body.mobile-simplified .settings-main {
+  max-width: 760px;
+  padding: 12px;
+}
+
+body.mobile-simplified .settings-card {
+  padding: 14px;
+}
+
+body.mobile-simplified .tab-nav {
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+body.mobile-simplified .tab-btn {
+  flex: 0 0 auto;
+  padding: 10px 12px;
+}
