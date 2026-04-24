@@ -17,6 +17,55 @@ let lastSyncTime = Date.now();
 let timerInterval = null;
 let collapsedGames = {};
 const MOBILE_SIMPLIFIED_KEY = 'dojo.mobileSimplified';
+const LEFT_PANEL_COLLAPSED_KEY = 'dojo.adminLeftPanelCollapsed';
+const RIGHT_PANEL_COLLAPSED_KEY = 'dojo.adminRightPanelCollapsed';
+
+function getPanelCollapseKey(side) {
+  return side === 'left' ? LEFT_PANEL_COLLAPSED_KEY : RIGHT_PANEL_COLLAPSED_KEY;
+}
+
+function getStoredPanelCollapsed(side) {
+  const raw = localStorage.getItem(getPanelCollapseKey(side));
+  if (raw === '1') return true;
+  if (raw === '0') return false;
+  return null;
+}
+
+function isSidePanelCollapsed(side) {
+  const stored = getStoredPanelCollapsed(side);
+  if (stored !== null) return stored;
+  return isMobileSimplifiedEnabled();
+}
+
+function updateSidePanelButtons() {
+  const leftBtn = document.getElementById('btnToggleLeftPanel');
+  const rightBtn = document.getElementById('btnToggleRightPanel');
+  const leftCollapsed = isSidePanelCollapsed('left');
+  const rightCollapsed = isSidePanelCollapsed('right');
+
+  if (leftBtn) {
+    leftBtn.textContent = leftCollapsed ? '🧰 Ouvrir outils' : '🧰 Masquer outils';
+    leftBtn.classList.toggle('collapsed', leftCollapsed);
+  }
+
+  if (rightBtn) {
+    rightBtn.textContent = rightCollapsed ? '📜 Ouvrir journal' : '📜 Masquer journal';
+    rightBtn.classList.toggle('collapsed', rightCollapsed);
+  }
+}
+
+function applySidePanelState() {
+  document.body.classList.toggle('left-panel-collapsed', isSidePanelCollapsed('left'));
+  document.body.classList.toggle('right-panel-collapsed', isSidePanelCollapsed('right'));
+  updateSidePanelButtons();
+}
+
+function toggleSidePanel(side) {
+  const collapsed = isSidePanelCollapsed(side);
+  localStorage.setItem(getPanelCollapseKey(side), collapsed ? '0' : '1');
+  applySidePanelState();
+  scalePreview();
+}
 
 function getMobileSimplifiedPreference() {
   const pref = localStorage.getItem(MOBILE_SIMPLIFIED_KEY);
@@ -61,6 +110,7 @@ function applyMobileSimplifiedMode() {
   const enabled = isMobileSimplifiedEnabled();
   document.body.classList.toggle('mobile-simplified', enabled);
   updateMobileModeButton();
+  applySidePanelState();
 }
 
 function toggleMobileSimplifiedMode() {
@@ -443,6 +493,8 @@ function scalePreview() {
 window.addEventListener('resize', () => {
   if (getMobileSimplifiedPreference() === null) {
     applyMobileSimplifiedMode();
+  } else {
+    applySidePanelState();
   }
   scalePreview();
 });
@@ -1007,6 +1059,7 @@ socket.on('bracket:syncCompleted', (data) => {
 // ─── INIT ───────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   applyMobileSimplifiedMode();
+  applySidePanelState();
   startTimerLoop();
   setTimeout(scalePreview, 200);
   initAutocompletes();

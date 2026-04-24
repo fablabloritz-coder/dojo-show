@@ -127,6 +127,10 @@ body {
   border-color: var(--purple-light);
 }
 .btn-mode:hover { border-color: var(--purple-primary); }
+.btn-panel-toggle.collapsed {
+  border-color: var(--purple-primary);
+  color: var(--purple-light);
+}
 
 /* ─── LAYOUT SELECTOR ────────────────────── */
 .layout-selector { display: flex; align-items: center; gap: 6px; }
@@ -150,10 +154,20 @@ body {
 
 /* ─── MAIN LAYOUT ────────────────────────── */
 .main-layout {
+  --left-panel-width: 280px;
+  --right-panel-width: 300px;
   display: grid;
-  grid-template-columns: 280px 1fr 300px;
+  grid-template-columns: var(--left-panel-width) minmax(0, 1fr) var(--right-panel-width);
   height: calc(100vh - 52px);
   gap: 0;
+}
+
+body.left-panel-collapsed .main-layout {
+  --left-panel-width: 0px;
+}
+
+body.right-panel-collapsed .main-layout {
+  --right-panel-width: 0px;
 }
 
 .panel {
@@ -212,6 +226,15 @@ body {
 .font-settings {
   flex: 1;
   overflow-y: auto;
+}
+
+body.left-panel-collapsed .panel-left,
+body.right-panel-collapsed .panel-right {
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* ─── FONT ACCORDION ─────────────────────── */
@@ -1223,7 +1246,8 @@ body {
 /* ─── RESPONSIVE ─────────────────────────── */
 @media (max-width: 1366px), (max-height: 820px) {
   .main-layout {
-    grid-template-columns: 240px 1fr 260px;
+    --left-panel-width: 240px;
+    --right-panel-width: 260px;
   }
 
   .game-group-content {
@@ -1291,6 +1315,11 @@ body {
 
   .panel-left {
     order: 3;
+  }
+
+  body.left-panel-collapsed .panel-left,
+  body.right-panel-collapsed .panel-right {
+    display: none;
   }
 
   .game-group-content {
@@ -1371,11 +1400,7 @@ body {
 }
 
 body.mobile-simplified .main-layout {
-  grid-template-columns: 1fr 300px;
-}
-
-body.mobile-simplified .panel-left {
-  display: none;
+  grid-template-columns: var(--left-panel-width) minmax(0, 1fr) var(--right-panel-width);
 }
 
 body.mobile-simplified .panel-center {
