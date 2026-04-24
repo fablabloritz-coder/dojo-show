@@ -160,6 +160,7 @@ body {
   grid-template-columns: var(--left-panel-width) minmax(0, 1fr) var(--right-panel-width);
   height: calc(100vh - 52px);
   gap: 0;
+  position: relative;
 }
 
 body.left-panel-collapsed .main-layout {
@@ -168,6 +169,42 @@ body.left-panel-collapsed .main-layout {
 
 body.right-panel-collapsed .main-layout {
   --right-panel-width: 0px;
+}
+
+.panel-handle {
+  position: absolute;
+  top: 16px;
+  z-index: 20;
+  width: 28px;
+  height: 44px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: var(--transition);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow);
+}
+
+.panel-handle:hover {
+  border-color: var(--purple-primary);
+  color: var(--text-primary);
+}
+
+.panel-handle-left {
+  left: max(6px, calc(var(--left-panel-width) - 14px));
+}
+
+.panel-handle-right {
+  right: max(6px, calc(var(--right-panel-width) - 14px));
+}
+
+.panel-handle.collapsed {
+  border-color: var(--purple-primary);
+  color: var(--purple-light);
 }
 
 .panel {
@@ -1297,6 +1334,19 @@ body.right-panel-collapsed .panel-right {
     height: auto;
   }
 
+  .panel-handle {
+    position: sticky;
+    top: 62px;
+  }
+
+  .panel-handle-left {
+    left: 10px;
+  }
+
+  .panel-handle-right {
+    right: 10px;
+  }
+
   .panel-left,
   .panel-center,
   .panel-right {
@@ -1399,16 +1449,8 @@ body.right-panel-collapsed .panel-right {
   box-shadow: 0 0 0 1px var(--purple-glow) inset;
 }
 
-body.mobile-simplified .main-layout {
-  grid-template-columns: var(--left-panel-width) minmax(0, 1fr) var(--right-panel-width);
-}
-
 body.mobile-simplified .panel-center {
   padding: 10px;
-}
-
-body.mobile-simplified .panel-right {
-  border-left: 1px solid var(--border-color);
 }
 
 body.mobile-simplified .game-group-content {
@@ -1465,10 +1507,5 @@ body.mobile-simplified .queue-actions .btn {
   body.mobile-simplified .main-layout {
     grid-template-columns: 1fr;
     height: auto;
-  }
-
-  body.mobile-simplified .panel-right {
-    border-left: none;
-    border-top: 1px solid var(--border-color);
   }
 }

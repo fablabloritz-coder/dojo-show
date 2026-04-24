@@ -34,12 +34,14 @@ function getStoredPanelCollapsed(side) {
 function isSidePanelCollapsed(side) {
   const stored = getStoredPanelCollapsed(side);
   if (stored !== null) return stored;
-  return isMobileSimplifiedEnabled();
+  return false;
 }
 
 function updateSidePanelButtons() {
   const leftBtn = document.getElementById('btnToggleLeftPanel');
   const rightBtn = document.getElementById('btnToggleRightPanel');
+  const leftHandle = document.getElementById('leftPanelHandle');
+  const rightHandle = document.getElementById('rightPanelHandle');
   const leftCollapsed = isSidePanelCollapsed('left');
   const rightCollapsed = isSidePanelCollapsed('right');
 
@@ -51,6 +53,18 @@ function updateSidePanelButtons() {
   if (rightBtn) {
     rightBtn.textContent = rightCollapsed ? '📜 Ouvrir journal' : '📜 Masquer journal';
     rightBtn.classList.toggle('collapsed', rightCollapsed);
+  }
+
+  if (leftHandle) {
+    leftHandle.textContent = leftCollapsed ? '▶' : '◀';
+    leftHandle.setAttribute('aria-label', leftCollapsed ? 'Déplier la colonne gauche' : 'Replier la colonne gauche');
+    leftHandle.classList.toggle('collapsed', leftCollapsed);
+  }
+
+  if (rightHandle) {
+    rightHandle.textContent = rightCollapsed ? '◀' : '▶';
+    rightHandle.setAttribute('aria-label', rightCollapsed ? 'Déplier la colonne droite' : 'Replier la colonne droite');
+    rightHandle.classList.toggle('collapsed', rightCollapsed);
   }
 }
 
